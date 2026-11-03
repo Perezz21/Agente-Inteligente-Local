@@ -1,4 +1,4 @@
-"""Integração inicial com modelos executados localmente pelo Ollama."""
+"""Integração com modelos executados localmente pelo Ollama."""
 
 from ollama import Client
 
@@ -10,7 +10,7 @@ class OllamaModelError(RuntimeError):
 
 
 class OllamaModelClient:
-    """Cliente simples para trocar o modelo sem alterar o restante do código."""
+    """Cliente para executar modelos locais sem acoplar o agente ao modelo."""
 
     def __init__(self, config: OllamaConfig) -> None:
         if not config.model:
@@ -25,30 +25,46 @@ class OllamaModelClient:
         """Verifica a conexão e retorna os modelos disponíveis localmente."""
         try:
             response = self.client.list()
-            models = response.models
-            return [model.model for model in models]
+            return [model.model for model in response.models]
         except Exception as exc:
             raise OllamaModelError(
                 "Não foi possível conectar ao Ollama. "
                 "Verifique se ele está instalado e em execução."
             ) from exc
 
-    def generate(self, prompt: str, system: str | None = None) -> str:
-        """Envia uma instrução ao modelo selecionado e retorna o texto gerado."""
+    def generate(
+        self,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int = 180,
+    ) -> str:
+        """Gera uma resposta objetiva, com o modo de pensamento desativado."""
         try:
-            response = self.client.generate(
+            response = self.client.chat(
                 model=self.model,
-                prompt=prompt,
-                system=system or (
-                    "Você é um componente de um agente especializado em "
-                    "processar requisições estruturadas e consultar bancos "
-                    "de dados relacionais. Responda somente ao que for solicitado."
-                ),
-                options={"temperature": 0},
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system or (
+                            "Você é um componente de um agente especializado em "
+                            "interpretar requisições estruturadas para consultas "
+                            "a bancos de dados relacionais. Seja direto e objetivo. "
+                            "Não exponha raciocínio interno."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                think=False,
+                options={
+                    "temperature": 0,
+                    "num_predict": max_tokens,
+                },
+                keep_alive="10m",
             )
-            return response.response.strip()
+            return (response.message.content or "").strip()
         except Exception as exc:
             raise OllamaModelError(
                 f"Falha ao executar o modelo local '{self.model}'. "
-                "Confirme se o modelo foi baixado no Ollama."
+                "Confirme se o modelo está instalado e se a versão do Ollama "
+                "é compatível com a opção de desativar o modo de pensamento."
             ) from exc
