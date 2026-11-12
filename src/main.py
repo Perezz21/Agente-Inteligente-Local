@@ -48,14 +48,28 @@ Responda em português, de forma concisa e organizada.
 
         print("\nInterpretando a requisição com o modelo local...")
         inicio = perf_counter()
-        resposta = model_client.generate(prompt=prompt, max_tokens=180)
-        duracao = perf_counter() - inicio
+        resultado = model_client.generate(prompt=prompt, max_tokens=180)
+        tempo_total = perf_counter() - inicio
 
         print("\n" + "=" * 50)
         print("INTERPRETAÇÃO DO AGENTE")
         print("=" * 50)
-        print(resposta)
-        print(f"\nTempo de interpretação: {duracao:.2f} segundos.")
+        print(resultado.content)
+
+        print("\nMÉTRICAS DE EXECUÇÃO")
+        print("=" * 50)
+        print(f"Tempo total medido pela aplicação: {tempo_total:.2f} s")
+
+        if resultado.load_seconds is not None:
+            print(f"Carregamento do modelo: {resultado.load_seconds:.2f} s")
+        if resultado.prompt_eval_seconds is not None:
+            print(f"Processamento da entrada: {resultado.prompt_eval_seconds:.2f} s")
+        if resultado.generation_seconds is not None:
+            print(f"Geração da resposta: {resultado.generation_seconds:.2f} s")
+        if resultado.prompt_tokens is not None:
+            print(f"Tokens de entrada: {resultado.prompt_tokens}")
+        if resultado.generated_tokens is not None:
+            print(f"Tokens gerados: {resultado.generated_tokens}")
 
     except (OllamaModelError, ValueError) as exc:
         print(f"\nErro: {exc}")
