@@ -1,5 +1,7 @@
 """Integração com modelos executados localmente pelo Ollama."""
 
+from dataclasses import dataclass
+
 from ollama import Client
 
 from src.agente.config import OllamaConfig
@@ -7,6 +9,18 @@ from src.agente.config import OllamaConfig
 
 class OllamaModelError(RuntimeError):
     """Erro de configuração ou comunicação com o modelo local."""
+
+
+@dataclass(frozen=True)
+class GenerationResult:
+    """Resposta do modelo acompanhada das métricas retornadas pelo Ollama."""
+
+    content: str
+    load_seconds: float | None
+    prompt_eval_seconds: float | None
+    generation_seconds: float | None
+    prompt_tokens: int | None
+    generated_tokens: int | None
 
 
 class OllamaModelClient:
@@ -37,8 +51,8 @@ class OllamaModelClient:
         prompt: str,
         system: str | None = None,
         max_tokens: int = 180,
-    ) -> str:
-        """Gera uma resposta objetiva, com o modo de pensamento desativado."""
+    ) -> GenerationResult:
+        """Gera uma resposta e registra as métricas de execução do Ollama."""
         try:
             response = self.client.chat(
                 model=self.model,
@@ -61,7 +75,18 @@ class OllamaModelClient:
                 },
                 keep_alive="10m",
             )
-            return (response.message.content or "").strip()
+
+            def to_seconds(value: int | None) -> float | None:
+                return value / 1_000_000_000 if value is not None else None
+
+            return GenerationResult(
+                content=(response.message.content or "").strip(),
+                load_seconds=to_seconds(response.load_duration),
+                prompt_eval_seconds=to_seconds(response.prompt_eval_duration),
+                generation_seconds=to_seconds(response.eval_duration),
+                prompt_tokens=response.prompt_eval_count,
+                generated_tokens=response.eval_count,
+            )
         except Exception as exc:
             raise OllamaModelError(
                 f"Falha ao executar o modelo local '{self.model}'. "
