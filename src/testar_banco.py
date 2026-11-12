@@ -1,3 +1,6 @@
+"""Teste de conexão e identificação da estrutura do banco MySQL."""
+
+import json
 
 from src.agente.database import DatabaseClient
 
@@ -12,31 +15,33 @@ def main():
 
         print("Conexão estabelecida com sucesso!")
 
-        cursor = banco.connection.cursor()
-        cursor.execute("SELECT DATABASE()")
-        resultado = cursor.fetchone()
-        cursor.close()
+        print("\nRecuperando estrutura completa do banco...")
 
-        print(f"Banco conectado: {resultado[0]}")
+        estrutura = banco.get_database_structure()
 
-        print("\nIdentificando estrutura do banco...")
+        print("\nESTRUTURA DO BANCO")
+        print("=" * 50)
 
-        esquema = banco.get_schema()
+        print(
+            json.dumps(
+                estrutura,
+                indent=4,
+                ensure_ascii=False
+            )
+        )
 
-        for tabela, colunas in esquema.items():
-            print(f"\nTabela: {tabela}")
+        print("\nRESUMO")
+        print("=" * 50)
 
-            for coluna in colunas:
-                print(
-                    f"  - {coluna['nome']} "
-                    f"({coluna['tipo']}) "
-                    f"[Chave: {coluna['chave'] or 'Não'}]"
-                )
-
-        print("\nTotal de tabelas identificadas:", len(esquema))
+        print(f"Banco: {estrutura['banco']}")
+        print(f"Tabelas: {len(estrutura['tabelas'])}")
+        print(
+            f"Relacionamentos: "
+            f"{len(estrutura['relacionamentos'])}"
+        )
 
     except Exception as erro:
-        print(f"Erro: {erro}")
+        print(f"\nErro: {erro}")
 
     finally:
         banco.close()

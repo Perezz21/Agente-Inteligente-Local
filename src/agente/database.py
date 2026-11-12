@@ -69,6 +69,70 @@ class DatabaseClient:
         finally:
             cursor.close()
 
+    def get_relationships(self) -> list[dict]:
+        """Identifica os relacionamentos entre as tabelas."""
+
+        if not self.connection or not self.connection.is_connected():
+            raise RuntimeError(
+                "Não existe uma conexão ativa com o MySQL."
+            )
+
+        cursor = self.connection.cursor(dictionary=True)
+
+        try:
+            cursor.execute(
+                """
+                SELECT
+                    TABLE_NAME,
+                    COLUMN_NAME,
+                    REFERENCED_TABLE_NAME,
+                    REFERENCED_COLUMN_NAME
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                WHERE TABLE_SCHEMA = %s
+                  AND REFERENCED_TABLE_NAME IS NOT NULL
+                ORDER BY TABLE_NAME, COLUMN_NAME
+                """,
+                ("agente_experimental",),
+            )
+
+            return cursor.fetchall()
+
+        finally:
+            cursor.close()
+
+    def get_database_structure(self) -> dict:
+        """Retorna a estrutura completa do banco de dados."""
+
+        esquema = self.get_schema()
+        relacionamentos = self.get_relationships()
+
+        tabelas = {}
+
+        for nome_tabela, colunas in esquema.items():
+            tabelas[nome_tabela] = {
+                "colunas": colunas
+            }
+
+        estrutura = {
+            "banco": "agente_experimental",
+            "tabelas": tabelas,
+            "relacionamentos": [
+                {
+                    "origem": (
+                        f"{relacao['TABLE_NAME']}."
+                        f"{relacao['COLUMN_NAME']}"
+                    ),
+                    "destino": (
+                        f"{relacao['REFERENCED_TABLE_NAME']}."
+                        f"{relacao['REFERENCED_COLUMN_NAME']}"
+                    )
+                }
+                for relacao in relacionamentos
+            ]
+        }
+
+        return estrutura
+
     def close(self) -> None:
         """Encerra a conexão com o banco."""
 
