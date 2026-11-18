@@ -81,6 +81,7 @@ class SQLGenerator:
                 return {
                     "consulta_sql": consulta.strip().rstrip(";"),
                     "parametros": parametros,
+                    "tentativas_sql": tentativa,
                 }
 
             except json.JSONDecodeError:
