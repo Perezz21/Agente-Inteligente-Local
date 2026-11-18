@@ -63,7 +63,7 @@ def executar_cenarios(
                     cenario["requisicao"], estrutura, modelo, banco
                 )
                 registrar_execucao(
-                    resposta, modelo.model, cenario["id"], destino
+                    resposta, modelo.model, cenario["id"], destino, repeticao=numero
                 )
                 resumo["sucessos"] += 1
                 print("Resultado: sucesso")
@@ -74,6 +74,7 @@ def executar_cenarios(
                     "data_hora_utc": datetime.now(timezone.utc).isoformat(),
                     "modelo": modelo.model,
                     "cenario": cenario["id"],
+                    "repeticao": numero,
                     "status": "falha",
                     "tipo_erro": type(exc).__name__,
                     "tempo_total_segundos": perf_counter() - inicio,
