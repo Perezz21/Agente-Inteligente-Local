@@ -15,6 +15,7 @@ def construir_registro(
     resposta: dict[str, Any],
     modelo: str,
     cenario: str = "manual",
+    repeticao: int | None = None,
 ) -> dict[str, Any]:
     """Constrói um registro de métricas, sem dados da consulta."""
     if not isinstance(modelo, str) or not modelo.strip():
@@ -22,12 +23,16 @@ def construir_registro(
     if not isinstance(cenario, str) or not cenario.strip():
         raise ValueError("O identificador do cenário é obrigatório.")
 
+    if repeticao is not None and (not isinstance(repeticao, int) or repeticao < 1):
+        raise ValueError("Repetição deve ser um inteiro positivo.")
+
     metricas = resposta["metricas"]
     interpretacao = metricas["interpretacao"]
     return {
         "data_hora_utc": datetime.now(timezone.utc).isoformat(),
         "modelo": modelo,
         "cenario": cenario,
+        "repeticao": repeticao,
         "status": "sucesso",
         "total_registros": resposta["total_registros"],
         "tentativas_sql": metricas.get("tentativas_sql"),
@@ -50,10 +55,11 @@ def registrar_execucao(
     modelo: str,
     cenario: str = "manual",
     caminho: Path | None = None,
+    repeticao: int | None = None,
 ) -> Path:
     """Acrescenta uma linha JSON à saída local, preservando execuções anteriores."""
     destino = Path(caminho) if caminho is not None else CAMINHO_PADRAO
-    registro = construir_registro(resposta, modelo, cenario)
+    registro = construir_registro(resposta, modelo, cenario, repeticao=repeticao)
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("a", encoding="utf-8") as arquivo:
         arquivo.write(json.dumps(registro, ensure_ascii=False, allow_nan=False) + "\n")
