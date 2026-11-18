@@ -2,7 +2,10 @@
 """Teste de integração entre o agente, Ollama e MySQL."""
 
 import json
-
+from src.agente.sql_generator import (
+    SQLGenerator,
+    SQLGenerationError,
+)
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.entrada import receber_json
@@ -170,6 +173,58 @@ def main():
             )
 
             print("\nJSON validado com sucesso!")
+
+            # 7. Gerar consulta SQL
+            print("\nGerando consulta SQL...")
+
+            gerador_sql = SQLGenerator(modelo)
+
+            consulta = gerador_sql.generate(
+                interpretacao=resposta,
+                estrutura=estrutura,
+            )
+
+            print("\n" + "=" * 50)
+            print("CONSULTA SQL GERADA")
+            print("=" * 50)
+
+            print(consulta["consulta_sql"])
+
+            print("\nPARÂMETROS")
+            print("=" * 50)
+
+            print(
+                json.dumps(
+                    consulta["parametros"],
+                    ensure_ascii=False,
+                    indent=4
+                )
+            )
+
+            print("\nConsulta SQL validada com sucesso!")
+
+            # 8. Executar consulta no MySQL
+            print("\nExecutando consulta no MySQL...")
+
+            registros = banco.execute_select(
+                consulta=consulta["consulta_sql"],
+                parametros=consulta["parametros"],
+            )
+
+            print("\n" + "=" * 50)
+            print("RESULTADOS DA CONSULTA")
+            print("=" * 50)
+
+            print(
+                json.dumps(
+                    registros,
+                    ensure_ascii=False,
+                    indent=4,
+                    default=str
+                )
+            )
+
+            print(f"\nTotal de registros recuperados: {len(registros)}")
 
         except (json.JSONDecodeError, ValueError) as erro:
             print(f"\nA resposta do modelo não passou na validação: {erro}")

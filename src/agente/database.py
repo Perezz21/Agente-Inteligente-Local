@@ -133,6 +133,27 @@ class DatabaseClient:
 
         return estrutura
 
+    def execute_select(
+        self,
+        consulta: str,
+        parametros: list | None = None,
+    ) -> list[dict]:
+        """Executa uma consulta SELECT parametrizada e retorna os registros."""
+
+        if not self.connection or not self.connection.is_connected():
+            raise RuntimeError(
+                "Não existe uma conexão ativa com o MySQL."
+            )
+
+        cursor = self.connection.cursor(dictionary=True)
+
+        try:
+            cursor.execute(consulta, tuple(parametros or []))
+            return cursor.fetchall()
+
+        finally:
+            cursor.close()
+
     def close(self) -> None:
         """Encerra a conexão com o banco."""
 
