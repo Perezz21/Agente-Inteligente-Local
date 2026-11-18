@@ -1,12 +1,14 @@
 """Ponto de entrada do Agente Inteligente Local (fluxo completo)."""
 
 import json
+import os
 
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.entrada import receber_json
 from src.agente.fluxo import executar_requisicao
 from src.agente.ollama_client import OllamaModelClient, OllamaModelError
+from src.agente.registro_metricas import registrar_execucao
 
 
 def main() -> None:
@@ -80,6 +82,16 @@ def main() -> None:
             valor = interpretacao[chave]
             if valor is not None:
                 print(f"{rotulo}: {valor}")
+
+        try:
+            destino = registrar_execucao(
+                resposta,
+                modelo=config.model,
+                cenario=os.getenv("AGENTE_CENARIO_ID", "manual"),
+            )
+            print(f"\nMétricas registradas em: {destino}")
+        except (OSError, ValueError, TypeError) as erro:
+            print(f"\nAviso: não foi possível registrar métricas: {erro}")
 
     except (OllamaModelError, ValueError, RuntimeError) as erro:
         print(f"\nErro: {erro}")
