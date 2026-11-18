@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cenario_01",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "data da medição",
+        "vazão",
+        "nível do rio",
+        "nome do município"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      }
+    }
+  }
+]
