@@ -134,15 +134,19 @@ def executar_requisicao(
     interpretacao = completar_interpretacao(
         requisicao, interpretacao, estrutura
     )
+    fim_interpretacao = perf_counter()
 
     gerador = SQLGenerator(modelo)
     consulta = gerador.generate(
         interpretacao=interpretacao, estrutura=estrutura
     )
+    fim_geracao_sql = perf_counter()
+
     registros = banco.execute_select(
         consulta=consulta["consulta_sql"],
         parametros=consulta["parametros"],
     )
+    fim_execucao = perf_counter()
 
     return {
         "interpretacao": interpretacao,
@@ -151,7 +155,11 @@ def executar_requisicao(
         "registros": registros,
         "total_registros": len(registros),
         "metricas": {
-            "tempo_total_segundos": perf_counter() - inicio,
+            "tempo_total_segundos": fim_execucao - inicio,
+            "tempo_interpretacao_segundos": fim_interpretacao - inicio,
+            "tempo_geracao_sql_segundos": fim_geracao_sql - fim_interpretacao,
+            "tempo_execucao_mysql_segundos": fim_execucao - fim_geracao_sql,
+            "tentativas_sql": consulta.get("tentativas_sql"),
             "interpretacao": {
                 "carregamento_segundos": resultado_modelo.load_seconds,
                 "processamento_prompt_segundos": (
