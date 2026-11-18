@@ -116,8 +116,31 @@ class TesteRelacionamentosJoin(unittest.TestCase):
         self.rejeita(sql, "Relacionamentos JOIN divergem|relacionamentos JOIN divergem")
 
     def test_03_rejeita_relacionamento_ausente(self):
-        sql = SELECT + JOIN_RIO + WHERE
-        self.rejeita(sql, "Relacionamentos JOIN divergem|relacionamentos JOIN divergem")
+        # Remove campos/filtros de municipios para isolar o JOIN ausente:
+        # a consulta permanece válida até a checagem dos relacionamentos.
+        interpretacao = {
+            **INTERPRETACAO,
+            "campos_solicitados": [
+                "rios.nome",
+                "AVG(medicoes.vazao_m3_s)",
+            ],
+            "filtros": [
+                INTERPRETACAO["filtros"][1],
+                INTERPRETACAO["filtros"][2],
+            ],
+        }
+        sql = (
+            "SELECT rios.nome, AVG(medicoes.vazao_m3_s) "
+            "FROM medicoes JOIN rios ON medicoes.rio_id = rios.id "
+            "WHERE rios.nome = %s AND YEAR(medicoes.data_medicao) = %s "
+            "GROUP BY rios.nome"
+        )
+        with self.assertRaisesRegex(
+            SQLGenerationError, "relacionamentos JOIN divergem"
+        ):
+            SQLGenerator._validate_query(
+                sql, ["Rio Claro", 2025], ESTRUTURA, interpretacao
+            )
 
     def test_04_rejeita_relacionamento_adicional(self):
         sql = (
