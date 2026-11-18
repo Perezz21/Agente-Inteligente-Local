@@ -9,6 +9,7 @@ from src.agente.sql_generator import (
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.entrada import receber_json
+from src.agente.interpretacao import completar_interpretacao
 from src.agente.ollama_client import (
     OllamaModelClient,
     OllamaModelError,
@@ -163,6 +164,10 @@ def main():
                 raise ValueError(
                     f"Campos ausentes na resposta: {faltantes}"
                 )
+
+            resposta = completar_interpretacao(
+                requisicao, resposta, estrutura
+            )
 
             print(
                 json.dumps(
