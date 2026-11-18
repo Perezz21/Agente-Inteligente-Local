@@ -14,6 +14,7 @@ env/
 # Environment and local configuration
 .env
 .env.*
+!.env.example
 
 # Editors and operating systems
 .vscode/
