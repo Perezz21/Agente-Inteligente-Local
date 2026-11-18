@@ -245,6 +245,8 @@ REGRAS PARA A CORREÇÃO:
 21. Utilize um marcador %s para cada valor de filtro.
 22. Respeite a ordem dos parâmetros conforme a ordem das condições SQL.
 23. Para o operador ANO_IGUAL, utilize YEAR(campo) = %s.
+24. Preserve exatamente os relacionamentos necessários nos JOINs.
+25. Não omita, substitua ou acrescente relacionamentos nas condições ON.
 
 Retorne exclusivamente um objeto JSON contendo:
 - consulta_sql
@@ -730,3 +732,121 @@ ESTRUTURA DO BANCO:
                     "selecionadas fora das funções de agregação: "
                     f"{sorted(colunas_faltantes)}."
                 )
+
+        # Verifica se os JOINs correspondem aos relacionamentos esperados.
+        def normalizar_relacionamento(origem: str, destino: str) -> frozenset:
+            return frozenset((origem.casefold(), destino.casefold()))
+
+        def extrair_relacionamentos(lista: Any) -> set[frozenset]:
+            if not isinstance(lista, list):
+                raise SQLGenerationError(
+                    "Os relacionamentos devem ser informados em uma lista."
+                )
+
+            relacionamentos = set()
+
+            for item in lista:
+                if not isinstance(item, dict):
+                    raise SQLGenerationError(
+                        "Relacionamento com estrutura inválida."
+                    )
+
+                origem = item.get("origem")
+                destino = item.get("destino")
+
+                if (
+                    not isinstance(origem, str)
+                    or not isinstance(destino, str)
+                    or len(origem.split(".")) != 2
+                    or len(destino.split(".")) != 2
+                    or not all(origem.split("."))
+                    or not all(destino.split("."))
+                ):
+                    raise SQLGenerationError(
+                        "Relacionamento com colunas inválidas."
+                    )
+
+                relacionamentos.add(
+                    normalizar_relacionamento(origem, destino)
+                )
+
+            return relacionamentos
+
+        esperados = extrair_relacionamentos(
+            interpretacao.get("relacionamentos_necessarios", [])
+        )
+        permitidos = extrair_relacionamentos(
+            estrutura.get("relacionamentos", [])
+        )
+
+        if not esperados.issubset(permitidos):
+            raise SQLGenerationError(
+                "A interpretação contém relacionamentos inexistentes no banco."
+            )
+
+        encontrados = set()
+
+        def analisar_on(condicao: exp.Expression) -> None:
+            if isinstance(condicao, exp.Paren):
+                analisar_on(condicao.this)
+                return
+
+            if isinstance(condicao, exp.And):
+                analisar_on(condicao.this)
+                analisar_on(condicao.expression)
+                return
+
+            if not isinstance(condicao, exp.EQ):
+                raise SQLGenerationError(
+                    "A condição ON contém uma expressão não suportada."
+                )
+
+            esquerda, direita = condicao.this, condicao.expression
+
+            if not (
+                isinstance(esquerda, exp.Column)
+                and isinstance(direita, exp.Column)
+            ):
+                raise SQLGenerationError(
+                    "JOIN deve comparar duas colunas qualificadas."
+                )
+
+            if not esquerda.table or not direita.table:
+                raise SQLGenerationError(
+                    "Coluna do JOIN sem identificação da tabela."
+                )
+
+            tabela_esquerda = aliases.get(esquerda.table.casefold())
+            tabela_direita = aliases.get(direita.table.casefold())
+
+            if not tabela_esquerda or not tabela_direita:
+                raise SQLGenerationError(
+                    "O JOIN usa uma tabela não reconhecida."
+                )
+
+            encontrados.add(
+                normalizar_relacionamento(
+                    f"{tabela_esquerda}.{esquerda.name}",
+                    f"{tabela_direita}.{direita.name}",
+                )
+            )
+
+        for join in arvore.find_all(exp.Join):
+            condicao_on = join.args.get("on")
+
+            if condicao_on is None:
+                raise SQLGenerationError(
+                    "JOIN sem condição ON não é permitido."
+                )
+
+            analisar_on(condicao_on)
+
+        faltantes = esperados - encontrados
+        extras = encontrados - esperados
+
+        if faltantes or extras:
+            raise SQLGenerationError(
+                "Os relacionamentos JOIN divergem da interpretação. "
+                f"Ausentes: {sorted(map(sorted, faltantes))}. "
+                f"Adicionais: {sorted(map(sorted, extras))}."
+            )
