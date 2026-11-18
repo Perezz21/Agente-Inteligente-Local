@@ -54,6 +54,10 @@ class TesteCenariosExperimentais(unittest.TestCase):
         self.assertEqual(resultado, {"sucessos": 3, "falhas": 0})
         self.assertEqual(executar.call_count, 3)
         self.assertEqual(registrar.call_count, 3)
+        self.assertEqual(
+            [call.kwargs["repeticao"] for call in registrar.call_args_list],
+            [1, 2, 3],
+        )
 
     @patch("src.executar_experimentos.executar_requisicao")
     def test_05_registra_falhas_sem_dados_da_consulta(self, executar):
@@ -71,6 +75,10 @@ class TesteCenariosExperimentais(unittest.TestCase):
         self.assertEqual(len(texto.splitlines()), 2)
         self.assertNotIn("senha_de_teste_e_filtro_privado", texto)
         self.assertEqual(json.loads(texto.splitlines()[0])["tipo_erro"], "ValueError")
+        self.assertEqual(
+            [json.loads(linha)["repeticao"] for linha in texto.splitlines()],
+            [1, 2],
+        )
 
     def test_06_rejeita_repeticoes_fora_do_limite(self):
         with self.assertRaisesRegex(ValueError, "entre 1 e 100"):
