@@ -64,6 +64,11 @@ def main() -> None:
         print("=" * 50)
         metricas = resposta["metricas"]
         print(f"Tempo total da requisição: {metricas['tempo_total_segundos']:.2f} s")
+        print(f"Tempo da interpretação: {metricas['tempo_interpretacao_segundos']:.2f} s")
+        print(f"Tempo da geração/validação SQL: {metricas['tempo_geracao_sql_segundos']:.2f} s")
+        print(f"Tempo da execução MySQL: {metricas['tempo_execucao_mysql_segundos']:.2f} s")
+        if metricas["tentativas_sql"] is not None:
+            print(f"Tentativas SQL: {metricas['tentativas_sql']}")
         interpretacao = metricas["interpretacao"]
         for rotulo, chave in (
             ("Carregamento", "carregamento_segundos"),
