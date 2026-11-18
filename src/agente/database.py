@@ -8,6 +8,8 @@ import sqlglot
 from mysql.connector import MySQLConnection
 from sqlglot import exp
 
+from src.agente.config import load_local_environment
+
 
 class DatabaseClient:
     """Cliente responsável pela conexão com o MySQL."""
@@ -17,6 +19,8 @@ class DatabaseClient:
 
     def connect(self) -> None:
         """Estabelece conexão com o banco experimental."""
+
+        load_local_environment()
 
         usuario = os.getenv("MYSQL_USER")
         senha = os.getenv("MYSQL_PASSWORD")
