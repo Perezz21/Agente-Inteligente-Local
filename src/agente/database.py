@@ -1,8 +1,12 @@
 
 """Gerenciamento da conexão com o banco de dados MySQL."""
 
+import os
+
 import mysql.connector
+import sqlglot
 from mysql.connector import MySQLConnection
+from sqlglot import exp
 
 
 class DatabaseClient:
@@ -14,12 +18,32 @@ class DatabaseClient:
     def connect(self) -> None:
         """Estabelece conexão com o banco experimental."""
 
+        usuario = os.getenv("MYSQL_USER")
+        senha = os.getenv("MYSQL_PASSWORD")
+        banco = os.getenv("MYSQL_DATABASE", "agente_experimental")
+        host = os.getenv("MYSQL_HOST", "localhost")
+        porta = os.getenv("MYSQL_PORT", "3306")
+
+        if not usuario or not senha:
+            raise RuntimeError(
+                "Configure MYSQL_USER e MYSQL_PASSWORD no ambiente. "
+                "Utilize uma conta MySQL somente de leitura."
+            )
+
+        try:
+            porta_numero = int(porta)
+        except ValueError as exc:
+            raise RuntimeError("MYSQL_PORT deve ser um número inteiro.") from exc
+
+        if not 1 <= porta_numero <= 65535:
+            raise RuntimeError("MYSQL_PORT fora da faixa permitida.")
+
         self.connection = mysql.connector.connect(
-            host="localhost",
-            port=3306,
-            user="root",
-            password="rootroot",
-            database="agente_experimental",
+            host=host,
+            port=porta_numero,
+            user=usuario,
+            password=senha,
+            database=banco,
         )
 
     def get_schema(self) -> dict:
@@ -45,7 +69,7 @@ class DatabaseClient:
                 WHERE TABLE_SCHEMA = %s
                 ORDER BY TABLE_NAME, ORDINAL_POSITION
                 """,
-                ("agente_experimental",),
+                (os.getenv("MYSQL_DATABASE", "agente_experimental"),),
             )
 
             colunas = cursor.fetchall()
@@ -114,7 +138,7 @@ class DatabaseClient:
             }
 
         estrutura = {
-            "banco": "agente_experimental",
+            "banco": os.getenv("MYSQL_DATABASE", "agente_experimental"),
             "tabelas": tabelas,
             "relacionamentos": [
                 {
@@ -145,12 +169,43 @@ class DatabaseClient:
                 "Não existe uma conexão ativa com o MySQL."
             )
 
-        cursor = self.connection.cursor(dictionary=True)
+        # Defesa adicional: não confia apenas na validação do gerador.
+        # A proteção principal é a conta MySQL com privilégios SELECT.
+        if not isinstance(consulta, str) or not consulta.strip():
+            raise ValueError("Consulta SQL vazia ou inválida.")
 
+        sql = consulta.strip()
+        if ";" in sql or "--" in sql or "/*" in sql or "#" in sql:
+            raise ValueError("Comentários e múltiplas instruções não permitidos.")
+
+        try:
+            instrucoes = sqlglot.parse(
+                sql.replace("%s", "NULL"), read="mysql"
+            )
+        except Exception as exc:
+            raise ValueError("Consulta SQL inválida.") from exc
+
+        if len(instrucoes) != 1 or not isinstance(instrucoes[0], exp.Select):
+            raise ValueError("Somente consultas SELECT são permitidas.")
+
+        arvore = instrucoes[0]
+        proibidos = (
+            exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create,
+            exp.Alter, exp.Command, exp.Union, exp.Intersect, exp.Except,
+        )
+        if any(isinstance(no, proibidos) for no in arvore.walk()):
+            raise ValueError("Consulta contém operação não autorizada.")
+
+        if arvore.args.get("into") is not None or arvore.args.get("locks"):
+            raise ValueError("SELECT INTO e bloqueios não são permitidos.")
+
+        if any(isinstance(no, exp.Select) for no in arvore.walk() if no is not arvore):
+            raise ValueError("Subconsultas ainda não são permitidas.")
+
+        cursor = self.connection.cursor(dictionary=True)
         try:
             cursor.execute(consulta, tuple(parametros or []))
             return cursor.fetchall()
-
         finally:
             cursor.close()
 
