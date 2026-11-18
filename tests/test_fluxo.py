@@ -63,6 +63,50 @@ class TesteFluxoPrincipal(unittest.TestCase):
             parametros=[],
         )
 
+    @patch("src.agente.fluxo.perf_counter")
+    @patch("src.agente.fluxo.SQLGenerator")
+    @patch("src.agente.fluxo.completar_interpretacao")
+    def test_06_registra_tempos_por_etapa(
+        self, completar, classe_sql, relogio
+    ):
+        relogio.side_effect = [10.0, 12.0, 17.0, 18.5]
+        completar.return_value = INTERPRETACAO
+        classe_sql.return_value.generate.return_value = {
+            "consulta_sql": "SELECT medicoes.vazao_m3_s FROM medicoes",
+            "parametros": [],
+            "tentativas_sql": 2,
+        }
+        banco = Mock()
+        banco.execute_select.return_value = []
+        resposta = executar_requisicao(
+            REQUISICAO, ESTRUTURA,
+            criar_modelo(json.dumps(INTERPRETACAO)), banco,
+        )
+        metricas = resposta["metricas"]
+        self.assertEqual(metricas["tempo_total_segundos"], 8.5)
+        self.assertEqual(metricas["tempo_interpretacao_segundos"], 2.0)
+        self.assertEqual(metricas["tempo_geracao_sql_segundos"], 5.0)
+        self.assertEqual(metricas["tempo_execucao_mysql_segundos"], 1.5)
+        self.assertEqual(metricas["tentativas_sql"], 2)
+
+    @patch("src.agente.fluxo.SQLGenerator")
+    @patch("src.agente.fluxo.completar_interpretacao")
+    def test_07_compatibilidade_sem_contador_tentativas(
+        self, completar, classe_sql
+    ):
+        completar.return_value = INTERPRETACAO
+        classe_sql.return_value.generate.return_value = {
+            "consulta_sql": "SELECT medicoes.vazao_m3_s FROM medicoes",
+            "parametros": [],
+        }
+        banco = Mock()
+        banco.execute_select.return_value = []
+        resposta = executar_requisicao(
+            REQUISICAO, ESTRUTURA,
+            criar_modelo(json.dumps(INTERPRETACAO)), banco,
+        )
+        self.assertIsNone(resposta["metricas"]["tentativas_sql"])
+
     def test_02_rejeita_json_invalido(self):
         with self.assertRaisesRegex(ValueError, "JSON válido"):
             executar_requisicao(
