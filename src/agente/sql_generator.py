@@ -178,6 +178,7 @@ REGRAS OBRIGATÓRIAS:
 15. Não invente tabelas, colunas ou relacionamentos.
 16. Não gere comentários SQL nem múltiplas instruções.
 17. Não utilize SELECT *.
+18. Não acrescente agrupamentos extras e preserve as agregações solicitadas.
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
 
@@ -247,6 +248,9 @@ REGRAS PARA A CORREÇÃO:
 23. Para o operador ANO_IGUAL, utilize YEAR(campo) = %s.
 24. Preserve exatamente os relacionamentos necessários nos JOINs.
 25. Não omita, substitua ou acrescente relacionamentos nas condições ON.
+26. Preserve as funções e os campos exatos de cada agregação.
+27. O GROUP BY deve conter exatamente os campos de agrupamento solicitados.
+28. Não acrescente GROUP BY a consultas sem agregação ou agrupamento solicitado.
 
 Retorne exclusivamente um objeto JSON contendo:
 - consulta_sql
@@ -850,3 +854,123 @@ ESTRUTURA DO BANCO:
                 f"Ausentes: {sorted(map(sorted, faltantes))}. "
                 f"Adicionais: {sorted(map(sorted, extras))}."
             )
+
+        # Validação semântica completa do agrupamento.
+        # Sem agrupamento explícito, as colunas não agregadas da
+        # projeção definem o agrupamento esperado quando há agregação.
+        def assinatura_coluna(expressao: exp.Expression) -> str:
+            if not isinstance(expressao, exp.Column):
+                raise SQLGenerationError(
+                    "GROUP BY deve utilizar apenas colunas qualificadas."
+                )
+
+            if not expressao.table:
+                raise SQLGenerationError(
+                    "Coluna do GROUP BY sem identificação da tabela."
+                )
+
+            tabela = aliases.get(expressao.table.casefold())
+            if tabela is None:
+                raise SQLGenerationError(
+                    "Tabela não identificada no GROUP BY."
+                )
+
+            return f"{tabela}.{expressao.name}".casefold()
+
+        agrupamento_sql = arvore.args.get("group")
+        colunas_agrupamento_sql = []
+
+        if agrupamento_sql is not None:
+            colunas_agrupamento_sql = [
+                assinatura_coluna(item)
+                for item in agrupamento_sql.expressions
+            ]
+
+        if len(colunas_agrupamento_sql) != len(set(colunas_agrupamento_sql)):
+            raise SQLGenerationError(
+                "GROUP BY contém colunas repetidas."
+            )
+
+        agrupamento_interpretado = interpretacao.get("agrupamento")
+        if agrupamento_interpretado is not None:
+            if not isinstance(agrupamento_interpretado, list):
+                raise SQLGenerationError(
+                    "O agrupamento da interpretação deve ser uma lista."
+                )
+            colunas_esperadas_group = []
+            for campo in agrupamento_interpretado:
+                if not isinstance(campo, str):
+                    raise SQLGenerationError(
+                        "Agrupamento inválido na interpretação."
+                    )
+                try:
+                    coluna = sqlglot.parse_one(
+                        f"SELECT {campo}", read="mysql"
+                    ).expressions[0]
+                except Exception as exc:
+                    raise SQLGenerationError(
+                        "Agrupamento inválido na interpretação."
+                    ) from exc
+                colunas_esperadas_group.append(assinatura_coluna(coluna))
+        elif possui_agregacao:
+            colunas_esperadas_group = [
+                f"{tabela}.{coluna}".casefold()
+                for tabela, coluna in colunas_nao_agregadas
+            ]
+        else:
+            colunas_esperadas_group = []
+
+        # Uma agregação global válida não precisa de GROUP BY.
+        # Uma consulta sem agregação também não deve agrupar implicitamente.
+        if set(colunas_agrupamento_sql) != set(colunas_esperadas_group):
+            raise SQLGenerationError(
+                "GROUP BY diferente do agrupamento solicitado. "
+                f"Esperado: {sorted(set(colunas_esperadas_group))}. "
+                f"Encontrado: {sorted(set(colunas_agrupamento_sql))}."
+            )
+
+        # Confere os detalhes das agregações explicitadas no JSON original
+        # quando foram preservados na interpretação.
+        agregacoes_esperadas = interpretacao.get("agregacoes")
+        if agregacoes_esperadas is not None:
+            if not isinstance(agregacoes_esperadas, list):
+                raise SQLGenerationError(
+                    "A lista de agregações da interpretação é inválida."
+                )
+
+            assinaturas_esperadas = set()
+            for item in agregacoes_esperadas:
+                if not isinstance(item, dict):
+                    raise SQLGenerationError(
+                        "Agregação inválida na interpretação."
+                    )
+                funcao, campo = item.get("funcao"), item.get("campo")
+                if not isinstance(funcao, str) or not isinstance(campo, str):
+                    raise SQLGenerationError(
+                        "Função ou campo de agregação inválido."
+                    )
+                try:
+                    projecao = sqlglot.parse_one(
+                        f"SELECT {funcao}({campo})", read="mysql"
+                    ).expressions[0]
+                    assinatura = extrair_assinatura(projecao)
+                except SQLGenerationError:
+                    raise
+                except Exception as exc:
+                    raise SQLGenerationError(
+                        "Agregação inválida na interpretação."
+                    ) from exc
+                if assinatura[2] is None:
+                    raise SQLGenerationError(
+                        "Função de agregação não reconhecida."
+                    )
+                assinaturas_esperadas.add(assinatura)
+
+            assinaturas_encontradas = {
+                assinatura for assinatura in campos_encontrados
+                if assinatura[2] is not None
+            }
+            if assinaturas_encontradas != assinaturas_esperadas:
+                raise SQLGenerationError(
+                    "As agregações SQL não correspondem às solicitadas."
+                )
