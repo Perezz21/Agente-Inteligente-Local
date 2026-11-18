@@ -1,78 +1,85 @@
-"""Ponto de entrada do Agente Inteligente Local."""
+"""Ponto de entrada do Agente Inteligente Local (fluxo completo)."""
 
 import json
-from time import perf_counter
 
 from src.agente.config import OllamaConfig
+from src.agente.database import DatabaseClient
 from src.agente.entrada import receber_json
-from src.agente.ollama_client import (
-    OllamaModelClient,
-    OllamaModelError,
-)
+from src.agente.fluxo import executar_requisicao
+from src.agente.ollama_client import OllamaModelClient, OllamaModelError
 
 
 def main() -> None:
-    config = OllamaConfig.from_environment()
-
+    banco = DatabaseClient()
     try:
-        model_client = OllamaModelClient(config)
-        available_models = model_client.check_connection()
+        config = OllamaConfig.from_environment()
+        modelo = OllamaModelClient(config)
+        disponiveis = modelo.check_connection()
+        if config.model not in disponiveis:
+            raise OllamaModelError(
+                f"Modelo não encontrado entre os modelos instalados: {config.model}"
+            )
 
-        print("Conexão com o Ollama estabelecida.")
-        print(f"Modelo configurado: {config.model}")
-
-        if config.model not in available_models:
-            print("\nModelo não encontrado entre os modelos instalados.")
-            return
+        print(f"Modelo local: {config.model}")
+        banco.connect()
+        print("Conexão com MySQL estabelecida.")
+        estrutura = banco.get_database_structure()
+        print(
+            f"Estrutura carregada: {len(estrutura['tabelas'])} tabelas e "
+            f"{len(estrutura['relacionamentos'])} relacionamentos."
+        )
 
         requisicao = receber_json()
-
-        print("\nJSON recebido e validado:")
-        print(json.dumps(requisicao, indent=4, ensure_ascii=False))
-
-        prompt = f"""
-Analise a seguinte requisição estruturada em JSON:
-
-{json.dumps(requisicao, indent=2, ensure_ascii=False)}
-
-Identifique objetivamente:
-1. A entidade ou conjunto de dados solicitado.
-2. Os campos que devem ser recuperados.
-3. Os filtros informados e seus valores.
-4. O objetivo da consulta em uma frase.
-
-Não invente tabelas, colunas ou informações ausentes no JSON.
-Ainda não gere SQL: o esquema do banco será fornecido em outra etapa.
-Responda em português, de forma concisa e organizada.
-"""
-
-        print("\nInterpretando a requisição com o modelo local...")
-        inicio = perf_counter()
-        resultado = model_client.generate(prompt=prompt, max_tokens=180)
-        tempo_total = perf_counter() - inicio
+        print("\nInterpretando requisição e gerando consulta SQL...")
+        resposta = executar_requisicao(
+            requisicao=requisicao,
+            estrutura=estrutura,
+            modelo=modelo,
+            banco=banco,
+        )
 
         print("\n" + "=" * 50)
         print("INTERPRETAÇÃO DO AGENTE")
         print("=" * 50)
-        print(resultado.content)
+        print(json.dumps(resposta["interpretacao"], ensure_ascii=False, indent=4))
 
-        print("\nMÉTRICAS DE EXECUÇÃO")
+        print("\n" + "=" * 50)
+        print("CONSULTA SQL GERADA")
         print("=" * 50)
-        print(f"Tempo total medido pela aplicação: {tempo_total:.2f} s")
+        print(resposta["consulta_sql"])
 
-        if resultado.load_seconds is not None:
-            print(f"Carregamento do modelo: {resultado.load_seconds:.2f} s")
-        if resultado.prompt_eval_seconds is not None:
-            print(f"Processamento da entrada: {resultado.prompt_eval_seconds:.2f} s")
-        if resultado.generation_seconds is not None:
-            print(f"Geração da resposta: {resultado.generation_seconds:.2f} s")
-        if resultado.prompt_tokens is not None:
-            print(f"Tokens de entrada: {resultado.prompt_tokens}")
-        if resultado.generated_tokens is not None:
-            print(f"Tokens gerados: {resultado.generated_tokens}")
+        print("\nPARÂMETROS")
+        print("=" * 50)
+        print(json.dumps(resposta["parametros"], ensure_ascii=False, indent=4))
 
-    except (OllamaModelError, ValueError) as exc:
-        print(f"\nErro: {exc}")
+        print("\n" + "=" * 50)
+        print("RESULTADOS DA CONSULTA")
+        print("=" * 50)
+        print(json.dumps(
+            resposta["registros"], ensure_ascii=False, indent=4, default=str
+        ))
+        print(f"\nTotal de registros recuperados: {resposta['total_registros']}")
+
+        print("\nMÉTRICAS DA EXECUÇÃO")
+        print("=" * 50)
+        metricas = resposta["metricas"]
+        print(f"Tempo total da requisição: {metricas['tempo_total_segundos']:.2f} s")
+        interpretacao = metricas["interpretacao"]
+        for rotulo, chave in (
+            ("Carregamento", "carregamento_segundos"),
+            ("Processamento do prompt", "processamento_prompt_segundos"),
+            ("Geração", "geracao_segundos"),
+            ("Tokens de entrada", "tokens_entrada"),
+            ("Tokens gerados", "tokens_gerados"),
+        ):
+            valor = interpretacao[chave]
+            if valor is not None:
+                print(f"{rotulo}: {valor}")
+
+    except (OllamaModelError, ValueError, RuntimeError) as erro:
+        print(f"\nErro: {erro}")
+    finally:
+        banco.close()
 
 
 if __name__ == "__main__":
