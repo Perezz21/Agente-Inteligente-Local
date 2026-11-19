@@ -16,6 +16,7 @@ def construir_registro(
     modelo: str,
     cenario: str = "manual",
     repeticao: int | None = None,
+    avaliacao: dict | None = None,
 ) -> dict[str, Any]:
     """Constrói um registro de métricas, sem dados da consulta."""
     if not isinstance(modelo, str) or not modelo.strip():
@@ -33,6 +34,7 @@ def construir_registro(
         "modelo": modelo,
         "cenario": cenario,
         "repeticao": repeticao,
+        "avaliacao": avaliacao,
         "status": "sucesso",
         "total_registros": resposta["total_registros"],
         "tentativas_sql": metricas.get("tentativas_sql"),
@@ -56,10 +58,13 @@ def registrar_execucao(
     cenario: str = "manual",
     caminho: Path | None = None,
     repeticao: int | None = None,
+    avaliacao: dict | None = None,
 ) -> Path:
     """Acrescenta uma linha JSON à saída local, preservando execuções anteriores."""
     destino = Path(caminho) if caminho is not None else CAMINHO_PADRAO
-    registro = construir_registro(resposta, modelo, cenario, repeticao=repeticao)
+    registro = construir_registro(
+        resposta, modelo, cenario, repeticao=repeticao, avaliacao=avaliacao
+    )
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("a", encoding="utf-8") as arquivo:
         arquivo.write(json.dumps(registro, ensure_ascii=False, allow_nan=False) + "\n")
