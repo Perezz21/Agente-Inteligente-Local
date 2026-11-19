@@ -51,8 +51,13 @@ que não deve ser versionado. O campo `status=sucesso` indica execução sem
 falha técnica. O campo `avaliacao.correto` indica coincidência com a
 referência, quando ela existe.
 
-**Atenção:** a comparação utiliza nomes exatos das colunas de saída.
-Aliases SQL diferentes podem produzir registros semanticamente
-equivalentes marcados como diferentes. Antes da bateria definitiva,
-defina e documente uma convenção de aliases ou amplie a avaliação
-sem criar equivalências ambíguas.
+**Aliases SQL:** nos cenários 03 e 04, `colunas_referencia`
+associa cada coluna de origem (por exemplo, `rios.nome`) ao nome do
+campo no resultado de referência (`nome`). O avaliador lê a expressão
+SELECT com SQLGlot e considera equivalentes aliases distintos somente
+quando referem-se à mesma coluna de origem. Não aceita automaticamente
+colunas extras, expressões diferentes ou valores divergentes.
+
+O mapeamento é específico do **avaliador experimental**; não é
+fornecido ao modelo na geração de SQL. A precisão final ainda depende
+de confirmar que as referências do banco estão corretas.
