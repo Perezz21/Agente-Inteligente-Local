@@ -13,6 +13,27 @@
         "municipio": "Jataí",
         "ano": 2025
       }
-    }
+    },
+    "resultado_esperado": [
+      {
+        "data_medicao": "2025-01-15",
+        "vazao_m3_s": "19.80",
+        "nivel_m": "1.37",
+        "nome": "Jataí"
+      },
+      {
+        "data_medicao": "2025-04-15",
+        "vazao_m3_s": "25.60",
+        "nivel_m": "1.61",
+        "nome": "Jataí"
+      },
+      {
+        "data_medicao": "2025-08-15",
+        "vazao_m3_s": "17.90",
+        "nivel_m": "1.29",
+        "nome": "Jataí"
+      }
+    ],
+    "ordem_importa": false
   }
 ]
