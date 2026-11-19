@@ -1,0 +1,103 @@
+[
+  {
+    "id": "cenario_01",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "data da medição",
+        "vazão",
+        "nível do rio",
+        "nome do município"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      }
+    },
+    "resultado_esperado": [
+      {
+        "data_medicao": "2025-01-15",
+        "vazao_m3_s": "19.80",
+        "nivel_m": "1.37",
+        "nome": "Jataí"
+      },
+      {
+        "data_medicao": "2025-04-15",
+        "vazao_m3_s": "25.60",
+        "nivel_m": "1.61",
+        "nome": "Jataí"
+      },
+      {
+        "data_medicao": "2025-08-15",
+        "vazao_m3_s": "17.90",
+        "nivel_m": "1.29",
+        "nome": "Jataí"
+      }
+    ],
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_02",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "nome do rio",
+        "nome do município",
+        "média da vazão"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "rio": "Rio Claro",
+        "ano": 2025
+      },
+      "agrupamento": [
+        "rios.nome",
+        "municipios.nome"
+      ],
+      "agregacoes": [
+        {
+          "funcao": "AVG",
+          "campo": "medicoes.vazao_m3_s"
+        }
+      ]
+    },
+    "resultado_esperado": [
+      {
+        "rio": "Rio Claro",
+        "municipio": "Jataí",
+        "vazao_media": "21.100000"
+      }
+    ],
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_03",
+    "requisicao": {
+      "entidade": "rios",
+      "campos": [
+        "nome do rio",
+        "bacia hidrográfica"
+      ],
+      "filtros": {
+        "rio": "Rio Claro"
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_04",
+    "requisicao": {
+      "entidade": "indicadores",
+      "campos": [
+        "nome do indicador",
+        "valor",
+        "unidade",
+        "nome do município"
+      ],
+      "filtros": {
+        "municipio": "Jataí"
+      }
+    },
+    "ordem_importa": false
+  }
+]
