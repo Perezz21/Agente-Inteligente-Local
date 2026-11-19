@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
+from src.agente.avaliacao import avaliar_resultados
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.fluxo import executar_requisicao
@@ -35,7 +36,21 @@ def carregar_cenarios(caminho: Path) -> list[dict]:
         if not isinstance(requisicao, dict) or not requisicao:
             raise ValueError("Cada cenário precisa de uma requisicao JSON não vazia.")
         vistos.add(identificador)
-        cenarios.append({"id": identificador, "requisicao": requisicao})
+        esperado = item.get("resultado_esperado")
+        if "resultado_esperado" in item:
+            if not isinstance(esperado, list) or not all(
+                isinstance(linha, dict) for linha in esperado
+            ):
+                raise ValueError("resultado_esperado deve ser lista de objetos.")
+        ordem_importa = item.get("ordem_importa", False)
+        if not isinstance(ordem_importa, bool):
+            raise ValueError("ordem_importa deve ser booleano.")
+        cenarios.append({
+            "id": identificador,
+            "requisicao": requisicao,
+            "resultado_esperado": esperado,
+            "ordem_importa": ordem_importa,
+        })
     return cenarios
 
 
@@ -51,7 +66,10 @@ def executar_cenarios(
     if not isinstance(repeticoes, int) or not 1 <= repeticoes <= 100:
         raise ValueError("Repetições devem estar entre 1 e 100.")
 
-    resumo = {"sucessos": 0, "falhas": 0}
+    resumo = {
+        "sucessos": 0, "falhas": 0,
+        "corretos": 0, "incorretos": 0, "nao_avaliados": 0,
+    }
     destino = Path(destino)
 
     for cenario in cenarios:
@@ -62,11 +80,28 @@ def executar_cenarios(
                 resposta = executar_requisicao(
                     cenario["requisicao"], estrutura, modelo, banco
                 )
+                esperado = cenario.get("resultado_esperado")
+                avaliacao = (
+                    avaliar_resultados(
+                        resposta["registros"], esperado,
+                        ordem_importa=cenario.get("ordem_importa", False),
+                    )
+                    if esperado is not None else None
+                )
                 registrar_execucao(
-                    resposta, modelo.model, cenario["id"], destino, repeticao=numero
+                    resposta, modelo.model, cenario["id"], destino,
+                    repeticao=numero, avaliacao=avaliacao,
                 )
                 resumo["sucessos"] += 1
-                print("Resultado: sucesso")
+                if avaliacao is None:
+                    resumo["nao_avaliados"] += 1
+                    print("Resultado: sucesso (sem referência)")
+                elif avaliacao["correto"]:
+                    resumo["corretos"] += 1
+                    print("Resultado: sucesso, dados corretos")
+                else:
+                    resumo["incorretos"] += 1
+                    print("Resultado: sucesso, dados INCORRETOS")
             except Exception as exc:
                 # O texto da exceção pode conter valores de filtros, SQL ou dados.
                 # Registrar somente a categoria da falha, não sua mensagem.
@@ -117,6 +152,11 @@ def main() -> None:
             banco.close()
 
         print(f"\nResumo: {resumo['sucessos']} sucessos e {resumo['falhas']} falhas.")
+        print(
+            f"Avaliação: {resumo['corretos']} corretos, "
+            f"{resumo['incorretos']} incorretos e "
+            f"{resumo['nao_avaliados']} sem referência."
+        )
         print(f"Registros: {CAMINHO_PADRAO}")
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         # Evita exibir a mensagem, que pode conter dados inseridos.
