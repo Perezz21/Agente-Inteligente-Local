@@ -17,6 +17,7 @@ def construir_registro(
     cenario: str = "manual",
     repeticao: int | None = None,
     avaliacao: dict | None = None,
+    rodada_id: str | None = None,
 ) -> dict[str, Any]:
     """Constrói um registro de métricas, sem dados da consulta."""
     if not isinstance(modelo, str) or not modelo.strip():
@@ -27,6 +28,9 @@ def construir_registro(
     if repeticao is not None and (not isinstance(repeticao, int) or repeticao < 1):
         raise ValueError("Repetição deve ser um inteiro positivo.")
 
+    if rodada_id is not None and (not isinstance(rodada_id, str) or not rodada_id.strip()):
+        raise ValueError("Identificador da rodada inválido.")
+
     metricas = resposta["metricas"]
     interpretacao = metricas["interpretacao"]
     return {
@@ -34,6 +38,7 @@ def construir_registro(
         "modelo": modelo,
         "cenario": cenario,
         "repeticao": repeticao,
+        "rodada_id": rodada_id,
         "avaliacao": avaliacao,
         "status": "sucesso",
         "total_registros": resposta["total_registros"],
@@ -59,11 +64,13 @@ def registrar_execucao(
     caminho: Path | None = None,
     repeticao: int | None = None,
     avaliacao: dict | None = None,
+    rodada_id: str | None = None,
 ) -> Path:
     """Acrescenta uma linha JSON à saída local, preservando execuções anteriores."""
     destino = Path(caminho) if caminho is not None else CAMINHO_PADRAO
     registro = construir_registro(
-        resposta, modelo, cenario, repeticao=repeticao, avaliacao=avaliacao
+        resposta, modelo, cenario, repeticao=repeticao,
+        avaliacao=avaliacao, rodada_id=rodada_id
     )
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("a", encoding="utf-8") as arquivo:
