@@ -19,13 +19,13 @@ experimentos oficiais sem identificação adicional.
 |---|---|---|
 | cenario_01 | Seleção e filtros com JOIN | 3 medições de Jataí em 2025, já verificadas |
 | cenario_02 | Agregação AVG com dois JOINs e GROUP BY | Rio Claro/Jataí, média de 21,10 m³/s, já verificada |
-| cenario_03 | Seleção e filtro em rios | Pendente de conferência manual |
+| cenario_03 | Seleção e filtro em rios | Conferida no MySQL Workbench |
 | cenario_04 | JOIN entre indicadores e municípios | Pendente de conferência manual |
 
 O arquivo `experiments/cenarios_piloto.json` contém as requisições.
-Não atribuí referências fictícias aos cenários 03 e 04. Esses cenários podem
-ser explorados, mas **não podem contar como acertos** até que a referência
-seja estabelecida de maneira independente.
+As referências dos cenários 03 e 04 foram adicionadas a partir de resultados
+consultados diretamente no MySQL Workbench. Antes da avaliação definitiva,
+reconfirme todas as referências após congelar os dados do banco.
 
 As referências 01 e 02 são baseadas no banco experimental local observado.
 Antes dos experimentos finais, congele a versão dos dados e valide
