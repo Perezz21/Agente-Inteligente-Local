@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
 from src.agente.avaliacao import avaliar_resultados
 from src.agente.config import OllamaConfig
@@ -61,6 +62,7 @@ def executar_cenarios(
     banco,
     estrutura: dict,
     destino: Path = CAMINHO_PADRAO,
+    rodada_id: str | None = None,
 ) -> dict:
     """Executa cenários em sequência; registra sucesso e falha sem dados sensíveis."""
     if not isinstance(repeticoes, int) or not 1 <= repeticoes <= 100:
@@ -71,6 +73,10 @@ def executar_cenarios(
         "corretos": 0, "incorretos": 0, "nao_avaliados": 0,
     }
     destino = Path(destino)
+    if rodada_id is None:
+        rodada_id = uuid4().hex
+    if not isinstance(rodada_id, str) or not rodada_id.strip():
+        raise ValueError("Identificador da rodada inválido.")
 
     for cenario in cenarios:
         for numero in range(1, repeticoes + 1):
@@ -91,6 +97,7 @@ def executar_cenarios(
                 registrar_execucao(
                     resposta, modelo.model, cenario["id"], destino,
                     repeticao=numero, avaliacao=avaliacao,
+                    rodada_id=rodada_id,
                 )
                 resumo["sucessos"] += 1
                 if avaliacao is None:
@@ -110,6 +117,7 @@ def executar_cenarios(
                     "modelo": modelo.model,
                     "cenario": cenario["id"],
                     "repeticao": numero,
+                    "rodada_id": rodada_id,
                     "status": "falha",
                     "tipo_erro": type(exc).__name__,
                     "tempo_total_segundos": perf_counter() - inicio,
@@ -130,10 +138,22 @@ def main() -> None:
         help="Arquivo JSON com lista de cenários."
     )
     parser.add_argument("--repeticoes", type=int, default=1)
+    parser.add_argument("--validar", action="store_true",
+                        help="Validar cenários sem executar Ollama ou MySQL.")
     args = parser.parse_args()
 
     try:
         cenarios = carregar_cenarios(args.arquivo)
+        if args.validar:
+            com_referencia = sum(
+                item["resultado_esperado"] is not None for item in cenarios
+            )
+            print(
+                f"Cenários válidos: {len(cenarios)}; "
+                f"com referência: {com_referencia}; "
+                f"pendentes: {len(cenarios) - com_referencia}."
+            )
+            return
         if not 1 <= args.repeticoes <= 100:
             raise ValueError("Repetições devem estar entre 1 e 100.")
         config = OllamaConfig.from_environment()
@@ -141,12 +161,15 @@ def main() -> None:
         if config.model not in modelo.check_connection():
             raise RuntimeError("Modelo configurado não está disponível no Ollama.")
 
+        rodada_id = uuid4().hex
+        print(f"Rodada experimental: {rodada_id}")
         banco = DatabaseClient()
         try:
             banco.connect()
             estrutura = banco.get_database_structure()
             resumo = executar_cenarios(
-                cenarios, args.repeticoes, modelo, banco, estrutura
+                cenarios, args.repeticoes, modelo, banco, estrutura,
+                rodada_id=rodada_id,
             )
         finally:
             banco.close()
