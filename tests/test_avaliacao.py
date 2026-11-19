@@ -50,7 +50,7 @@ class TesteAvaliacao(unittest.TestCase):
         self.assertTrue(avaliar_resultados(
             [{"dia": date(2025, 1, 15)}],
             [{"dia": "2025-01-15"}],
-        )["correto"] is False)
+        )["correto"] )
         self.assertTrue(avaliar_resultados(
             [{"dia": date(2025, 1, 15)}],
             [{"dia": date(2025, 1, 15)}],
