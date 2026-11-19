@@ -46,11 +46,27 @@ def carregar_cenarios(caminho: Path) -> list[dict]:
         ordem_importa = item.get("ordem_importa", False)
         if not isinstance(ordem_importa, bool):
             raise ValueError("ordem_importa deve ser booleano.")
+        colunas_referencia = item.get("colunas_referencia")
+        if colunas_referencia is not None:
+            if (
+                not isinstance(colunas_referencia, dict)
+                or not colunas_referencia
+                or not all(
+                    isinstance(chave, str) and chave
+                    and isinstance(valor, str) and valor
+                    for chave, valor in colunas_referencia.items()
+                )
+                or len(set(colunas_referencia.values())) != len(colunas_referencia)
+            ):
+                raise ValueError("colunas_referencia inválidas.")
+            if esperado is None:
+                raise ValueError("colunas_referencia exige resultado_esperado.")
         cenarios.append({
             "id": identificador,
             "requisicao": requisicao,
             "resultado_esperado": esperado,
             "ordem_importa": ordem_importa,
+            "colunas_referencia": colunas_referencia,
         })
     return cenarios
 
@@ -91,6 +107,8 @@ def executar_cenarios(
                     avaliar_resultados(
                         resposta["registros"], esperado,
                         ordem_importa=cenario.get("ordem_importa", False),
+                        consulta_sql=resposta.get("consulta_sql"),
+                        colunas_referencia=cenario.get("colunas_referencia"),
                     )
                     if esperado is not None else None
                 )
