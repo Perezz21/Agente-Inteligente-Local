@@ -56,7 +56,7 @@ class TesteRodadasExperimentais(unittest.TestCase):
         cenarios = carregar_cenarios(caminho)
         self.assertEqual(len(cenarios), 4)
         self.assertEqual(
-            sum(c["resultado_esperado"] is not None for c in cenarios), 2
+            sum(c["resultado_esperado"] is not None for c in cenarios), 4
         )
 
     def test_04_rejeita_rodada_vazia(self):
