@@ -82,7 +82,13 @@
         "rio": "Rio Claro"
       }
     },
-    "ordem_importa": false
+    "ordem_importa": false,
+    "resultado_esperado": [
+      {
+        "nome": "Rio Claro",
+        "bacia_hidrografica": "Paranaíba"
+      }
+    ]
   },
   {
     "id": "cenario_04",
@@ -98,6 +104,26 @@
         "municipio": "Jataí"
       }
     },
-    "ordem_importa": false
+    "ordem_importa": false,
+    "resultado_esperado": [
+      {
+        "nome": "Índice de qualidade da água",
+        "valor": "82.500",
+        "unidade": "pontos",
+        "municipio": "Jataí"
+      },
+      {
+        "nome": "Índice de qualidade da água",
+        "valor": "85.200",
+        "unidade": "pontos",
+        "municipio": "Jataí"
+      },
+      {
+        "nome": "Cobertura de monitoramento",
+        "valor": "76.000",
+        "unidade": "%",
+        "municipio": "Jataí"
+      }
+    ]
   }
 ]
