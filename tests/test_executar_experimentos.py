@@ -51,7 +51,7 @@ class TesteCenariosExperimentais(unittest.TestCase):
             resultado = executar_cenarios(
                 cenario, 3, modelo, Mock(), {}, destino
             )
-        self.assertEqual(resultado, {"sucessos": 3, "falhas": 0})
+        self.assertEqual(resultado, {"sucessos": 3, "falhas": 0, "corretos": 0, "incorretos": 0, "nao_avaliados": 3})
         self.assertEqual(executar.call_count, 3)
         self.assertEqual(registrar.call_count, 3)
         self.assertEqual(
@@ -71,7 +71,7 @@ class TesteCenariosExperimentais(unittest.TestCase):
                 cenario, 2, modelo, Mock(), {}, destino
             )
             texto = destino.read_text(encoding="utf-8")
-        self.assertEqual(resumo, {"sucessos": 0, "falhas": 2})
+        self.assertEqual(resumo, {"sucessos": 0, "falhas": 2, "corretos": 0, "incorretos": 0, "nao_avaliados": 0})
         self.assertEqual(len(texto.splitlines()), 2)
         self.assertNotIn("senha_de_teste_e_filtro_privado", texto)
         self.assertEqual(json.loads(texto.splitlines()[0])["tipo_erro"], "ValueError")
