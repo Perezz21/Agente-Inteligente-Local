@@ -18,7 +18,7 @@ def _normalizar_valor(valor: Any) -> tuple:
     if isinstance(valor, (int, float, Decimal)):
         return ("numero", str(Decimal(str(valor)).normalize()))
     if isinstance(valor, (date, datetime)):
-        return ("data", valor.isoformat())
+        return ("texto", valor.isoformat())
     if isinstance(valor, str):
         # Conectores SQL frequentemente retornam DECIMAL como Decimal;
         # o JSON esperado só permite representar esse valor como texto/número.
