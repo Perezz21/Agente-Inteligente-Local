@@ -88,7 +88,11 @@
         "nome": "Rio Claro",
         "bacia_hidrografica": "Paranaíba"
       }
-    ]
+    ],
+    "colunas_referencia": {
+      "rios.nome": "nome",
+      "rios.bacia_hidrografica": "bacia_hidrografica"
+    }
   },
   {
     "id": "cenario_04",
@@ -124,6 +128,12 @@
         "unidade": "%",
         "municipio": "Jataí"
       }
-    ]
+    ],
+    "colunas_referencia": {
+      "indicadores.nome": "nome",
+      "indicadores.valor": "valor",
+      "indicadores.unidade": "unidade",
+      "municipios.nome": "municipio"
+    }
   }
 ]
