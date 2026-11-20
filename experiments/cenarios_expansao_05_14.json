@@ -3,6 +3,7 @@
     "id": "cenario_05",
     "categoria": "Projeção simples com filtro",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "municípios",
       "campos": [
         "nome do município",
@@ -11,7 +12,9 @@
       ],
       "filtros": {
         "municipio": "Jataí"
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -19,12 +22,16 @@
     "id": "cenario_06",
     "categoria": "Projeção simples sem filtros",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "municípios",
       "campos": [
         "nome do município",
         "UF",
         "região"
-      ]
+      ],
+      "filtros": {},
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -32,6 +39,7 @@
     "id": "cenario_07",
     "categoria": "Filtros por município e ano",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "data da medição",
@@ -41,7 +49,9 @@
       "filtros": {
         "municipio": "Jataí",
         "ano": 2025
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -49,11 +59,15 @@
     "id": "cenario_08",
     "categoria": "Projeção dos rios sem filtros",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "rios",
       "campos": [
         "nome do rio",
         "bacia hidrográfica"
-      ]
+      ],
+      "filtros": {},
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -61,6 +75,7 @@
     "id": "cenario_09",
     "categoria": "JOIN entre rios e municípios",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "rios",
       "campos": [
         "nome do rio",
@@ -69,7 +84,9 @@
       ],
       "filtros": {
         "municipio": "Jataí"
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -77,6 +94,7 @@
     "id": "cenario_10",
     "categoria": "JOIN entre indicadores e municípios",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "indicadores",
       "campos": [
         "nome do indicador",
@@ -85,7 +103,9 @@
       ],
       "filtros": {
         "municipio": "Jataí"
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -93,6 +113,7 @@
     "id": "cenario_11",
     "categoria": "Dois JOINs e filtros combinados",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "data da medição",
@@ -104,7 +125,9 @@
         "rio": "Rio Claro",
         "municipio": "Jataí",
         "ano": 2025
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false
   },
@@ -112,6 +135,7 @@
     "id": "cenario_12",
     "categoria": "Agregação global AVG",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "média do nível do rio"
@@ -120,6 +144,7 @@
         "municipio": "Jataí",
         "ano": 2025
       },
+      "agrupamento": [],
       "agregacoes": [
         {
           "funcao": "AVG",
@@ -133,6 +158,7 @@
     "id": "cenario_13",
     "categoria": "Agregação global MAX",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "maior vazão"
@@ -141,6 +167,7 @@
         "municipio": "Jataí",
         "ano": 2025
       },
+      "agrupamento": [],
       "agregacoes": [
         {
           "funcao": "MAX",
@@ -154,6 +181,7 @@
     "id": "cenario_14",
     "categoria": "AVG agrupada por rio",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "nome do rio",
