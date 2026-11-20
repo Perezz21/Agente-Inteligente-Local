@@ -6,70 +6,40 @@ from typing import Any
 
 from src.agente.interpretacao import completar_interpretacao
 from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
+from src.agente.validacao_mapeamento import validar_mapeamento
 from src.agente.sql_generator import SQLGenerator, SQLGenerationError
 
 
 def montar_prompt(requisicao: dict, estrutura: dict) -> str:
-    """Prepara as instruções para interpretação da requisição."""
-
-    return f"""
-Você é um componente especializado em interpretar requisições
-estruturadas para consultas a bancos de dados relacionais.
-
-Sua tarefa é analisar a requisição e identificar como seus campos
-e filtros correspondem às tabelas e colunas existentes no banco.
-
-REGRAS OBRIGATÓRIAS:
-
-1. Utilize exclusivamente tabelas e colunas presentes no esquema.
-2. Identifique os campos solicitados com seus nomes completos,
-   no formato tabela.coluna.
-3. Relacione cada filtro à coluna que representa semanticamente
-   seu conteúdo.
-4. Não associe valores textuais diretamente a campos numéricos.
-5. Quando um filtro representar o nome de uma entidade, utilize
-   a coluna de nome correspondente, mesmo que seja necessário
-   estabelecer um relacionamento entre tabelas.
-6. Não converta nomes em IDs. Essa conversão não faz parte
-   desta etapa.
-7. Para filtros de ano, utilize o campo de data correspondente
-   e o operador ANO_IGUAL.
-8. Identifique os relacionamentos necessários utilizando
-   exclusivamente as chaves estrangeiras disponíveis.
-9. Não invente tabelas, colunas ou relacionamentos.
-10. Não gere SQL.
-11. Se não houver informação suficiente, indique a ambiguidade
-    no campo observacoes e utilize status "ambiguo".
-
-EXEMPLO GENÉRICO DE MAPEAMENTO:
-Se a requisição pedir um atributo, identifique sua coluna no
-esquema fornecido e retorne o nome completo tabela.coluna.
-Use [] para filtros e relacionamentos quando não forem necessários.
-Não descreva o banco nem faça uma análise narrativa.
-
-FORMATO OBRIGATÓRIO DA RESPOSTA:
-
-Retorne exclusivamente um objeto JSON válido, sem Markdown,
-sem blocos de código e sem explicações fora do JSON.
-
-O objeto deve possuir exatamente estas propriedades:
-
-{{
-    "tabelas_identificadas": [],
-    "campos_solicitados": [],
-    "filtros": [],
-    "relacionamentos_necessarios": [],
-    "status": "sucesso",
-    "observacoes": ""
-}}
-
-REQUISIÇÃO:
-{json.dumps(requisicao, ensure_ascii=False, indent=2)}
-
-ESTRUTURA DO BANCO:
-{json.dumps(estrutura, ensure_ascii=False, indent=2)}
-"""
-
+    """Prompt compacto: metadados são referências, não campos a devolver."""
+    catalogo = {
+        nome: [coluna["nome"] for coluna in dados.get("colunas", [])]
+        for nome, dados in estrutura.get("tabelas", {}).items()
+    }
+    relacionamentos = estrutura.get("relacionamentos", [])
+    return (
+        "TAREFA: interpretar APENAS a REQUISICAO abaixo para MySQL.\\n"
+        "O CATALOGO é um inventário de tabelas e colunas, NÃO é a resposta.\\n"
+        "Não liste todas as tabelas ou colunas do catálogo.\\n"
+        "Para cada campo pedido, escolha uma coluna existente no formato "
+        "tabela.coluna; para agregações use FUNCAO(tabela.coluna).\\n"
+        "Use só as tabelas necessárias, sem filtros ou JOINs adicionais.\\n"
+        "O campo status será 'ambiguo' se não for possível mapear.\\n"
+        "Retorne somente o JSON de interpretação com as chaves "
+        "tabelas_identificadas, campos_solicitados, filtros, "
+        "relacionamentos_necessarios, status e observacoes.\\n"
+        "Formato dos filtros: {campo, operador, valor}. "
+        "Formato dos JOINs: {origem, destino}.\\n"
+        "CATALOGO (não copiar para a resposta):\\n"
+        + json.dumps(
+            {"tabelas_colunas": catalogo, "relacionamentos": relacionamentos},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        + "\\nREQUISICAO DO USUARIO (objetivo prioritário):\\n"
+        + json.dumps(requisicao, ensure_ascii=False, separators=(",", ":"))
+        + "\\nResponda somente ao objetivo da REQUISICAO, nunca descreva o CATALOGO."
+    )
 
 
 def executar_requisicao(
@@ -127,6 +97,10 @@ def executar_requisicao(
             and isinstance(candidato["observacoes"], str)
         ):
             erro_interpretacao = "Tipos inválidos na interpretação JSON."
+            continue
+        erro_mapeamento = validar_mapeamento(candidato, requisicao, estrutura)
+        if erro_mapeamento is not None:
+            erro_interpretacao = erro_mapeamento
             continue
         interpretacao = candidato
         break
