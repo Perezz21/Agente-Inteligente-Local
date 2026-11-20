@@ -51,6 +51,7 @@ class OllamaModelClient:
         prompt: str,
         system: str | None = None,
         max_tokens: int = 180,
+        json_mode: bool = False,
     ) -> GenerationResult:
         """Gera uma resposta e registra as métricas de execução do Ollama."""
         try:
@@ -74,6 +75,7 @@ class OllamaModelClient:
                     "num_predict": max_tokens,
                 },
                 keep_alive="10m",
+                **({"format": "json"} if json_mode else {}),
             )
 
             def to_seconds(value: int | None) -> float | None:
