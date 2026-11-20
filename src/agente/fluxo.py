@@ -5,6 +5,7 @@ from time import perf_counter
 from typing import Any
 
 from src.agente.interpretacao import completar_interpretacao
+from src.agente.contrato_requisicao import normalizar_requisicao
 from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
 from src.agente.validacao_mapeamento import validar_mapeamento
 from src.agente.sql_generator import SQLGenerator, SQLGenerationError
@@ -62,6 +63,7 @@ def executar_requisicao(
     a conexão, permitindo execução automatizada e testes com mocks.
     """
     inicio = perf_counter()
+    requisicao = normalizar_requisicao(requisicao)
     prompt = montar_prompt(requisicao, estrutura)
     obrigatorios = {
         "tabelas_identificadas",
