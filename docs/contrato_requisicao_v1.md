@@ -1,9 +1,16 @@
-# Contrato de requisição JSON v1.0
+# Contrato obrigatório de entrada JSON v1.0
 
-O agente recebe um **único arquivo JSON por consulta**. Os nomes de tabelas e
-colunas são descobertos automaticamente pelo MySQL durante a execução.
+O agente recebe **uma requisição JSON estruturada**. O formato é independente do
+modelo de banco de dados: nenhuma tabela ou coluna do Sakila, do banco ambiental
+ou de outro banco é exigida no código para aceitar um pedido.
 
-## Formato obrigatório para requisições v1.0
+A fonte única do padrão é
+[`schemas/requisicao_v1.schema.json`](../schemas/requisicao_v1.schema.json).
+A validação acontece em `src/agente/contrato_requisicao.py`, **antes de conectar
+ao Ollama ou ao MySQL**. Requisições com propriedades ausentes, extras, tipos
+incorretos ou versões não suportadas são recusadas.
+
+## Requisição válida
 
 ```json
 {
@@ -16,68 +23,85 @@ colunas são descobertos automaticamente pelo MySQL durante a execução.
 }
 ```
 
-As **seis propriedades são obrigatórias** na versão 1.0, mesmo quando
-`filtros`, `agrupamento` e `agregacoes` estão vazios.
+As **seis propriedades são obrigatórias**, mesmo que `filtros`,
+`agrupamento` e `agregacoes` estejam vazios.
 
-| Propriedade | Tipo | Significado |
+| Propriedade | Formato | O que informa |
 | --- | --- | --- |
-| `versao` | string | Contrato de entrada; atualmente `"1.0"` |
-| `entidade` | string não vazia | Assunto da consulta, como `"filmes"` ou `"medições"` |
-| `campos` | lista não vazia de strings | Atributos descritos em linguagem natural |
-| `filtros` | objeto | Condições semânticas como `"municipio": "Jataí"` e `"ano": 2025` |
-| `agrupamento` | lista | Colunas de agrupamento `tabela.coluna`; `[]` quando não há |
-| `agregacoes` | lista | Objetos `{"funcao": "AVG", "campo": "tabela.coluna"}` |
+| `versao` | `"1.0"` | Versão do contrato, não do banco |
+| `entidade` | texto não vazio | Assunto da requisição em linguagem natural |
+| `campos` | lista não vazia de textos | Campos desejados descritos pelo usuário |
+| `filtros` | objeto com chaves livres e valores simples | Critérios de consulta; `{}` para todos os registros |
+| `agrupamento` | lista de `tabela.coluna` | Agrupamentos, ou `[]` |
+| `agregacoes` | lista de objetos `{funcao, campo}` | `AVG`, `SUM`, `MIN`, `MAX`, `COUNT`, ou `[]` |
 
-As funções atualmente suportadas são `AVG`, `SUM`, `MIN`, `MAX` e
-`COUNT`. Cada objeto de agregação deve conter exatamente `funcao` e
-`campo`. O validador rejeita tipos incorretos, versões desconhecidas,
-campos obrigatórios ausentes e propriedades extras. A versão 1.0 ainda
-exige referências físicas `tabela.coluna` para agregações e agrupamentos:
-a interpretação totalmente semântica dessas duas operações é uma melhoria
-futura, não uma capacidade que já tenha sido implementada.
+As propriedades de `filtros` são livres (por exemplo, `titulo`, `ano`
+ou `municipio`). O validador **não escolhe tabelas ou colunas**;
+apenas verifica a estrutura. Em seguida, o agente descobre o banco conectado,
+interpreta os termos, gera SQL, valida e executa consultas somente de leitura.
 
-**Atenção:** os nomes de filtros não são fixados para um banco específico.
-O agente é responsável por interpretar as chaves semânticas de acordo com
-o esquema descoberto. A validação do contrato garante a **estrutura** do
-JSON, não a exatidão semântica do modelo.
+**Limitação atual:** `agrupamento` e `agregacoes[*].campo` ainda exigem
+referências físicas `tabela.coluna` no formato v1.0. Isso não fixa nenhum
+nome no código, mas exige que quem forneça essas operações conheça esses
+identificadores. Torná-los semânticos também é uma evolução planejada.
 
-## Exemplo com filtros
+## Requisições rejeitadas
+
+```json
+{"entidade": "filmes", "campos": ["título do filme"]}
+```
+
+Falta `versao` e faltam propriedades obrigatórias.
 
 ```json
 {
   "versao": "1.0",
-  "entidade": "medições",
-  "campos": ["data da medição", "vazão", "nome do município"],
-  "filtros": {"municipio": "Jataí", "ano": 2025},
+  "entidade": "filmes",
+  "campos": ["título do filme"],
+  "filtros": {},
   "agrupamento": [],
-  "agregacoes": []
+  "agregacoes": [],
+  "sql": "SELECT * FROM filme"
 }
 ```
 
-## Execução
+A propriedade `sql` não pertence ao contrato e é rejeitada. SQL não é
+recebido do usuário; é produzido e validado internamente pelo agente.
 
-Com `MYSQL_DATABASE=sakila` no `.env`:
+## Como executar
+
+Instale as dependências após atualizar o projeto:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Rode a consulta:
 
 ```powershell
 python -m src.main --arquivo experiments/requisicao_sakila_filmes_v1.json
 ```
 
-Ou forneça um arquivo próprio com as mesmas seis propriedades.
+Também é possível executar `python -m src.main` e colar o JSON válido.
 
-## Compatibilidade e evolução
+Os arquivos de `experiments/cenarios_*.json` contêm listas de cenários, e
+cada `requisicao` dentro da lista deve obedecer a esse mesmo contrato.
 
-- Requisições antigas **sem** a propriedade `versao` continuam aceitas,
-  preservando os cenários experimentais existentes.
-- A validação e a normalização estão centralizadas em
-  `src/agente/contrato_requisicao.py`.
-- Um JSON v1.0 validado é convertido internamente ao formato usado pelo
-  agente, sem os campos vazios e sem `versao`. Isso evita afetar os prompts
-  e a geração SQL já testados.
-- Ao criar v2, um novo contrato poderá ser implementado e despachado pelo
-  campo `versao`, com os contratos anteriores mantidos.
-- O JSON de **entrada** é diferente do JSON interno de **interpretação**
-  do modelo e do JSON interno de **geração SQL**.
-- O arquivo de cenários experimentais contém uma *lista de cenários*
-  com `id` e `requisicao`; cada `requisicao` pode utilizar o contrato v1.0.
+## Separação arquitetural
 
-Não envie senhas, credenciais nem instruções SQL no JSON de entrada.
+- **JSON externo:** descreve a intenção do usuário, conforme o JSON Schema.
+- **Interpretação interna do modelo:** identifica colunas e relacionamentos
+  existentes no banco conectado.
+- **Geração SQL interna:** constrói e valida um SELECT e seus parâmetros.
+
+A interface pública exige v1.0. Existe uma **compatibilidade transitória
+interna** no `executar_requisicao` para testes históricos que chamam essa
+função Python diretamente com o formato antigo; ela **não é usada para aceitar
+arquivos JSON externos**. Essa compatibilidade deverá ser removida após a
+migração dos testes internos.
+
+A validação do formato não garante a correção semântica do mapeamento: a
+interpretação, a geração SQL e os resultados ainda precisam ser avaliados
+com testes reais em diferentes bancos.
+
+Não inclua credenciais nem comandos SQL em arquivos de requisição.
