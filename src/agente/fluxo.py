@@ -107,16 +107,6 @@ def executar_requisicao(
     """
     inicio = perf_counter()
     prompt = montar_prompt(requisicao, estrutura)
-    resultado_modelo = modelo.generate(prompt=prompt, max_tokens=500)
-
-    try:
-        interpretacao = json.loads(resultado_modelo.content)
-    except json.JSONDecodeError as exc:
-        raise ValueError("O modelo não retornou JSON válido.") from exc
-
-    if not isinstance(interpretacao, dict):
-        raise ValueError("A interpretação deve ser um objeto JSON.")
-
     obrigatorios = {
         "tabelas_identificadas",
         "campos_solicitados",
@@ -125,10 +115,40 @@ def executar_requisicao(
         "status",
         "observacoes",
     }
-    faltantes = obrigatorios - interpretacao.keys()
-    if faltantes:
+    interpretacao = None
+    resultado_modelo = None
+    tentativas_interpretacao = 0
+    for tentativa in range(1, 3):
+        tentativas_interpretacao = tentativa
+        resultado_modelo = modelo.generate(
+            prompt=prompt,
+            max_tokens=1200,
+            json_mode=True,
+        )
+        try:
+            candidato = json.loads(resultado_modelo.content)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(candidato, dict):
+            continue
+        if obrigatorios - candidato.keys():
+            continue
+        if not (
+            isinstance(candidato["tabelas_identificadas"], list)
+            and isinstance(candidato["campos_solicitados"], list)
+            and isinstance(candidato["filtros"], list)
+            and isinstance(candidato["relacionamentos_necessarios"], list)
+            and isinstance(candidato["status"], str)
+            and isinstance(candidato["observacoes"], str)
+        ):
+            continue
+        interpretacao = candidato
+        break
+
+    if interpretacao is None:
         raise ValueError(
-            f"Campos obrigatórios ausentes na interpretação: {sorted(faltantes)}"
+            "O modelo não retornou um objeto JSON válido de interpretação "
+            "após 2 tentativas."
         )
 
     interpretacao = completar_interpretacao(
@@ -160,6 +180,7 @@ def executar_requisicao(
             "tempo_geracao_sql_segundos": fim_geracao_sql - fim_interpretacao,
             "tempo_execucao_mysql_segundos": fim_execucao - fim_geracao_sql,
             "tentativas_sql": consulta.get("tentativas_sql"),
+            "tentativas_interpretacao": tentativas_interpretacao,
             "interpretacao": {
                 "carregamento_segundos": resultado_modelo.load_seconds,
                 "processamento_prompt_segundos": (
