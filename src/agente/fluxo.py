@@ -69,8 +69,16 @@ def executar_requisicao(
     tentativas_interpretacao = 0
     for tentativa in range(1, 3):
         tentativas_interpretacao = tentativa
+        prompt_tentativa = prompt
+        if tentativa > 1:
+            prompt_tentativa += (
+                "\nA interpretação anterior foi rejeitada: "
+                + erro_interpretacao
+                + "\nRefaça somente o mapeamento solicitado, "
+                "usando nomes qualificados tabela.coluna do catálogo."
+            )
         resultado_modelo = modelo.generate(
-            prompt=prompt,
+            prompt=prompt_tentativa,
             max_tokens=1200,
             json_mode=True,
             json_schema=ESQUEMA_INTERPRETACAO,
