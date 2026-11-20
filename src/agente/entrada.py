@@ -1,6 +1,7 @@
 """Recebimento e validação inicial das requisições JSON."""
 
 import json
+from pathlib import Path
 from typing import Any
 
 
@@ -44,4 +45,21 @@ def receber_json() -> dict[str, Any]:
     if not isinstance(requisicao, dict):
         raise ValueError("A requisição deve ser um objeto JSON.")
 
+    return requisicao
+
+
+def receber_arquivo_json(caminho: str | Path) -> dict[str, Any]:
+    """Carrega uma requisição JSON de arquivo UTF-8."""
+    try:
+        conteudo = Path(caminho).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ValueError("Não foi possível ler o arquivo JSON informado.") from exc
+    try:
+        requisicao = json.loads(conteudo)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"JSON inválido na linha {exc.lineno}, coluna {exc.colno}."
+        ) from exc
+    if not isinstance(requisicao, dict):
+        raise ValueError("A requisição deve ser um objeto JSON.")
     return requisicao
