@@ -2,6 +2,7 @@
   {
     "id": "cenario_01",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "data da medição",
@@ -12,7 +13,9 @@
       "filtros": {
         "municipio": "Jataí",
         "ano": 2025
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "resultado_esperado": [
       {
@@ -39,6 +42,7 @@
   {
     "id": "cenario_02",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "nome do rio",
@@ -73,6 +77,7 @@
   {
     "id": "cenario_03",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "rios",
       "campos": [
         "nome do rio",
@@ -80,7 +85,9 @@
       ],
       "filtros": {
         "rio": "Rio Claro"
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false,
     "resultado_esperado": [
@@ -97,6 +104,7 @@
   {
     "id": "cenario_04",
     "requisicao": {
+      "versao": "1.0",
       "entidade": "indicadores",
       "campos": [
         "nome do indicador",
@@ -106,7 +114,9 @@
       ],
       "filtros": {
         "municipio": "Jataí"
-      }
+      },
+      "agrupamento": [],
+      "agregacoes": []
     },
     "ordem_importa": false,
     "resultado_esperado": [
