@@ -35,9 +35,13 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         })
         self.assertEqual(original, requisicao_v1())
 
-    def test_02_preserva_requisicao_legada(self):
+    def test_02_rejeita_legado_na_entrada_e_preserva_modo_interno(self):
         antiga = {"entidade": "filmes", "campos": ["título do filme"]}
-        self.assertIs(normalizar_requisicao(antiga), antiga)
+        with self.assertRaisesRegex(ValueError, "versao"):
+            normalizar_requisicao(antiga)
+        self.assertIs(
+            normalizar_requisicao(antiga, permitir_legado=True), antiga
+        )
 
     def test_03_valida_filtros_agrupamento_e_agregacoes(self):
         dados = requisicao_v1()
@@ -62,13 +66,13 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
     def test_05_rejeita_campos_obrigatorios_faltantes(self):
         dados = requisicao_v1()
         del dados["agrupamento"]
-        with self.assertRaisesRegex(ValueError, "obrigatórios ausentes"):
+        with self.assertRaisesRegex(ValueError, "fora do padrão"):
             normalizar_requisicao(dados)
 
     def test_06_rejeita_propriedades_extras(self):
         dados = requisicao_v1()
         dados["consulta_sql"] = "SELECT * FROM filme"
-        with self.assertRaisesRegex(ValueError, "desconhecidas"):
+        with self.assertRaisesRegex(ValueError, "fora do padrão"):
             normalizar_requisicao(dados)
 
     def test_07_rejeita_entidade_e_campos_invalidos(self):
@@ -103,16 +107,16 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
     def test_10_rejeita_agregacao_nao_suportada(self):
         dados = requisicao_v1()
         dados["agregacoes"] = [{"funcao": "MEDIAN", "campo": "medicoes.vazao_m3_s"}]
-        with self.assertRaisesRegex(ValueError, "Função"):
+        with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
 
     def test_11_rejeita_agregacao_malformada(self):
         dados = requisicao_v1()
         dados["agregacoes"] = [{"funcao": "AVG", "campo": "vazao"}]
-        with self.assertRaisesRegex(ValueError, "campo de agregação"):
+        with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
         dados["agregacoes"] = [{"funcao": "AVG"}]
-        with self.assertRaisesRegex(ValueError, "exatamente"):
+        with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
 
     def test_12_schema_declara_seis_propriedades_obrigatorias(self):
@@ -192,6 +196,41 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
             {"entidade": "filmes", "campos": ["título do filme"]},
             interpretacao, estrutura,
         )
+
+    def test_18_arquivo_externo_sem_versao_e_rejeitado(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            caminho = Path(pasta) / "legado.json"
+            caminho.write_text(
+                json.dumps({"entidade": "filmes", "campos": ["título"]}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "versao"):
+                receber_arquivo_json(caminho)
+
+    def test_19_arquivo_schema_externo_e_fonte_do_contrato(self):
+        raiz = Path(__file__).resolve().parents[1]
+        schema_path = raiz / "schemas" / "requisicao_v1.schema.json"
+        self.assertEqual(
+            json.loads(schema_path.read_text(encoding="utf-8")),
+            ESQUEMA_REQUISICAO_V1,
+        )
+        self.assertNotIn("filme", json.dumps(ESQUEMA_REQUISICAO_V1))
+
+    def test_20_rejeita_propriedades_extras_antes_de_qualquer_geracao(self):
+        dados = requisicao_v1()
+        dados["sql"] = "SELECT *"
+        modelo = Mock()
+        banco = Mock()
+        with self.assertRaisesRegex(ValueError, "padrão"):
+            normalizar_requisicao(dados)
+        modelo.generate.assert_not_called()
+        banco.execute_select.assert_not_called()
+
+    def test_21_rejeita_filtros_sem_tipo_especificado(self):
+        dados = requisicao_v1()
+        dados["filtros"] = {"ano": {"valor": 2025}}
+        with self.assertRaisesRegex(ValueError, "filtros"):
+            normalizar_requisicao(dados)
 
     def test_17_rejeita_requisicao_nao_json_objeto(self):
         with self.assertRaisesRegex(ValueError, "objeto JSON"):
