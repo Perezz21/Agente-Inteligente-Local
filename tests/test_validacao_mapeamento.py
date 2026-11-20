@@ -139,6 +139,12 @@ class TesteValidacaoMapeamento(unittest.TestCase):
         self.assertIn("\nREQUISICAO DO USUARIO", prompt)
         self.assertNotIn(r"\\nREQUISICAO DO USUARIO", prompt)
 
+    def test_11_prompt_nao_exige_filtro_para_consulta_simples(self):
+        prompt = montar_prompt(REQUISICAO, ESTRUTURA)
+        self.assertIn("FILTROS SÃO OPCIONAIS", prompt)
+        self.assertIn("filtros: []", prompt)
+        self.assertIn("status sucesso mesmo sem", prompt)
+
     def test_07_rejeita_apos_duas_interpretacoes_sem_colunas_validas(self):
         modelo = Mock()
         modelo.generate.return_value = retorno(
