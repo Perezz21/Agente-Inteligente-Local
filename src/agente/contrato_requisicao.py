@@ -1,155 +1,92 @@
-"""Contrato versionado das requisições externas (independente do banco).
+"""Validação estrutural da entrada; nenhuma tabela de banco é codificada aqui.
 
-A versão 1.0 tem seis propriedades obrigatórias. Requisições antigas sem
-"versao" continuam aceitas, sem modificação, para preservar os experimentos.
+A fonte do contrato é schemas/requisicao_v1.schema.json.
+Requisições legadas são aceitas somente por chamadas internas explícitas.
 """
 
+import json
 import math
-import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 
 VERSAO_REQUISICAO_ATUAL = "1.0"
-
-_REFERENCIA = re.compile(
-    r"^[A-Za-z_][A-Za-z_0-9]*\.[A-Za-z_][A-Za-z_0-9]*$"
+_CAMINHO_SCHEMA = (
+    Path(__file__).resolve().parents[2] / "schemas" / "requisicao_v1.schema.json"
 )
-_FUNCOES = {"AVG", "SUM", "MIN", "MAX", "COUNT"}
-
-ESQUEMA_REQUISICAO_V1 = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Requisição do Agente Inteligente Local v1.0",
-    "type": "object",
-    "properties": {
-        "versao": {"const": VERSAO_REQUISICAO_ATUAL},
-        "entidade": {"type": "string", "minLength": 1},
-        "campos": {
-            "type": "array", "minItems": 1,
-            "items": {"type": "string", "minLength": 1},
-        },
-        "filtros": {
-            "type": "object",
-            "additionalProperties": {
-                "type": ["string", "number", "boolean"]
-            },
-        },
-        "agrupamento": {
-            "type": "array",
-            "items": {"type": "string", "pattern": _REFERENCIA.pattern},
-        },
-        "agregacoes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "funcao": {"type": "string", "enum": sorted(_FUNCOES)},
-                    "campo": {"type": "string", "pattern": _REFERENCIA.pattern},
-                },
-                "required": ["funcao", "campo"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": [
-        "versao", "entidade", "campos", "filtros",
-        "agrupamento", "agregacoes",
-    ],
-    "additionalProperties": False,
-}
 
 
-def normalizar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
-    """Valida o formato externo v1 e o converte para o formato interno.
+@lru_cache(maxsize=1)
+def _carregar_esquema() -> dict[str, Any]:
+    """Carrega o contrato versionado, separado da lógica do agente."""
+    esquema = json.loads(_CAMINHO_SCHEMA.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(esquema)
+    return esquema
 
-    Entradas legadas sem "versao" mantêm o comportamento anterior.
-    A função NÃO tenta adivinhar colunas do banco: isso cabe ao agente.
+
+ESQUEMA_REQUISICAO_V1 = _carregar_esquema()
+
+
+def normalizar_requisicao(
+    requisicao: dict[str, Any], *, permitir_legado: bool = False
+) -> dict[str, Any]:
+    """Valida JSON externo pelo contrato v1.0 e cria a representação interna.
+
+    Por padrão, qualquer entrada sem a versão/campos exigidos é rejeitada
+    antes de alcançar Ollama ou MySQL. O modo legado é reservado aos
+    componentes internos que ainda trabalham com requisições históricas.
     """
     if not isinstance(requisicao, dict):
         raise ValueError("A requisição deve ser um objeto JSON.")
 
     if "versao" not in requisicao:
-        return requisicao
-
-    versao = requisicao["versao"]
-    if versao != VERSAO_REQUISICAO_ATUAL:
+        if permitir_legado:
+            return requisicao
         raise ValueError(
-            f"Versão de requisição não suportada: {versao!r}. "
+            "JSON fora do padrão: propriedade obrigatória 'versao' ausente. "
+            "Utilize o contrato JSON v1.0."
+        )
+
+    if requisicao["versao"] != VERSAO_REQUISICAO_ATUAL:
+        raise ValueError(
+            f"Versão de requisição não suportada: {requisicao['versao']!r}. "
             f"Utilize {VERSAO_REQUISICAO_ATUAL}."
         )
 
-    permitidos = set(ESQUEMA_REQUISICAO_V1["properties"])
-    obrigatorios = set(ESQUEMA_REQUISICAO_V1["required"])
-    ausentes = obrigatorios - requisicao.keys()
-    desconhecidos = requisicao.keys() - permitidos
-    if ausentes:
-        raise ValueError(f"Campos obrigatórios ausentes no JSON v1: {sorted(ausentes)}.")
-    if desconhecidos:
-        raise ValueError(f"Propriedades desconhecidas no JSON v1: {sorted(desconhecidos)}.")
-
-    entidade = requisicao["entidade"]
-    campos = requisicao["campos"]
-    filtros = requisicao["filtros"]
-    agrupamento = requisicao["agrupamento"]
-    agregacoes = requisicao["agregacoes"]
-
-    if not isinstance(entidade, str) or not entidade.strip():
-        raise ValueError("'entidade' deve ser um texto não vazio.")
-    if (
-        not isinstance(campos, list) or not campos
-        or any(not isinstance(c, str) or not c.strip() for c in campos)
-    ):
-        raise ValueError("'campos' deve ser uma lista não vazia de textos.")
-
-    if not isinstance(filtros, dict):
-        raise ValueError("'filtros' deve ser um objeto JSON.")
-    for chave, valor in filtros.items():
-        if not isinstance(chave, str) or not chave.strip():
-            raise ValueError("As chaves de 'filtros' devem ser textos não vazios.")
-        if (
-            valor is None or not isinstance(valor, (str, int, float, bool))
-            or (isinstance(valor, float) and not math.isfinite(valor))
-        ):
-            raise ValueError(
-                f"O filtro {chave!r} deve conter texto, número ou booleano."
-            )
-
-    if not isinstance(agrupamento, list) or any(
-        not isinstance(c, str) or not _REFERENCIA.fullmatch(c)
-        for c in agrupamento
-    ):
+    validador = Draft202012Validator(ESQUEMA_REQUISICAO_V1)
+    erros = sorted(
+        validador.iter_errors(requisicao),
+        key=lambda e: (len(e.absolute_path), list(map(str, e.absolute_path))),
+    )
+    if erros:
+        erro = erros[0]
+        local = ".".join(str(parte) for parte in erro.absolute_path) or "raiz"
         raise ValueError(
-            "'agrupamento' deve conter referências no formato tabela.coluna."
+            f"JSON fora do padrão v1.0 no campo '{local}': {erro.message}"
         )
 
-    if not isinstance(agregacoes, list):
-        raise ValueError("'agregacoes' deve ser uma lista.")
-    for item in agregacoes:
-        if not isinstance(item, dict) or set(item) != {"funcao", "campo"}:
+    # json.loads() de Python permite NaN/Infinity por padrão; não permitir
+    # números não finitos nem por chamadas diretas desta função.
+    for chave, valor in requisicao["filtros"].items():
+        if isinstance(valor, float) and not math.isfinite(valor):
             raise ValueError(
-                "Cada agregação deve conter exatamente 'funcao' e 'campo'."
-            )
-        if (
-            not isinstance(item["funcao"], str)
-            or item["funcao"] not in _FUNCOES
-        ):
-            raise ValueError(
-                f"Função de agregação inválida: {item['funcao']!r}."
-            )
-        if (
-            not isinstance(item["campo"], str)
-            or not _REFERENCIA.fullmatch(item["campo"])
-        ):
-            raise ValueError(
-                "O campo de agregação deve seguir o formato tabela.coluna."
+                f"JSON fora do padrão: filtro {chave!r} contém número não finito."
             )
 
-    # Mantém a estrutura interna já utilizada pelo agente. Campos opcionais
-    # vazios não são encaminhados para não alterar o comportamento existente.
-    normalizada = {"entidade": entidade, "campos": list(campos)}
-    if filtros:
-        normalizada["filtros"] = dict(filtros)
-    if agrupamento:
-        normalizada["agrupamento"] = list(agrupamento)
-    if agregacoes:
-        normalizada["agregacoes"] = [dict(item) for item in agregacoes]
+    # Adapta a interface externa genérica ao contrato INTERNO já testado.
+    normalizada = {
+        "entidade": requisicao["entidade"],
+        "campos": list(requisicao["campos"]),
+    }
+    if requisicao["filtros"]:
+        normalizada["filtros"] = dict(requisicao["filtros"])
+    if requisicao["agrupamento"]:
+        normalizada["agrupamento"] = list(requisicao["agrupamento"])
+    if requisicao["agregacoes"]:
+        normalizada["agregacoes"] = [
+            dict(item) for item in requisicao["agregacoes"]
+        ]
     return normalizada
