@@ -27,7 +27,7 @@ def _estrutura_relevante(interpretacao: dict, estrutura: dict) -> dict:
     def incluir_referencias(valor):
         if isinstance(valor, str):
             for nome, _ in re.findall(
-                r"(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]*)\\.([A-Za-z_][A-Za-z_0-9]*)",
+                r"(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]*)\.([A-Za-z_][A-Za-z_0-9]*)",
                 valor,
             ):
                 real = nomes.get(nome.casefold())
