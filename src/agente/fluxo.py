@@ -18,27 +18,27 @@ def montar_prompt(requisicao: dict, estrutura: dict) -> str:
     }
     relacionamentos = estrutura.get("relacionamentos", [])
     return (
-        "TAREFA: interpretar APENAS a REQUISICAO abaixo para MySQL.\\n"
-        "O CATALOGO é um inventário de tabelas e colunas, NÃO é a resposta.\\n"
-        "Não liste todas as tabelas ou colunas do catálogo.\\n"
+        "TAREFA: interpretar APENAS a REQUISICAO abaixo para MySQL.\n"
+        "O CATALOGO é um inventário de tabelas e colunas, NÃO é a resposta.\n"
+        "Não liste todas as tabelas ou colunas do catálogo.\n"
         "Para cada campo pedido, escolha uma coluna existente no formato "
-        "tabela.coluna; para agregações use FUNCAO(tabela.coluna).\\n"
-        "Use só as tabelas necessárias, sem filtros ou JOINs adicionais.\\n"
-        "O campo status será 'ambiguo' se não for possível mapear.\\n"
+        "tabela.coluna; para agregações use FUNCAO(tabela.coluna).\n"
+        "Use só as tabelas necessárias, sem filtros ou JOINs adicionais.\n"
+        "O campo status será 'ambiguo' se não for possível mapear.\n"
         "Retorne somente o JSON de interpretação com as chaves "
         "tabelas_identificadas, campos_solicitados, filtros, "
-        "relacionamentos_necessarios, status e observacoes.\\n"
+        "relacionamentos_necessarios, status e observacoes.\n"
         "Formato dos filtros: {campo, operador, valor}. "
-        "Formato dos JOINs: {origem, destino}.\\n"
-        "CATALOGO (não copiar para a resposta):\\n"
+        "Formato dos JOINs: {origem, destino}.\n"
+        "CATALOGO (não copiar para a resposta):\n"
         + json.dumps(
             {"tabelas_colunas": catalogo, "relacionamentos": relacionamentos},
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        + "\\nREQUISICAO DO USUARIO (objetivo prioritário):\\n"
+        + "\nREQUISICAO DO USUARIO (objetivo prioritário):\n"
         + json.dumps(requisicao, ensure_ascii=False, separators=(",", ":"))
-        + "\\nResponda somente ao objetivo da REQUISICAO, nunca descreva o CATALOGO."
+        + "\nResponda somente ao objetivo da REQUISICAO, nunca descreva o CATALOGO."
     )
 
 
@@ -105,6 +105,14 @@ def executar_requisicao(
             and isinstance(candidato["observacoes"], str)
         ):
             erro_interpretacao = "Tipos inválidos na interpretação JSON."
+            continue
+        if candidato["status"] != "sucesso":
+            observacoes = candidato["observacoes"].strip()
+            erro_interpretacao = (
+                f"Interpretação com status {candidato['status']!r}."
+                + (f" Motivo informado: {observacoes[:500]}" if observacoes else
+                   " O modelo não informou uma justificativa.")
+            )
             continue
         erro_mapeamento = validar_mapeamento(candidato, requisicao, estrutura)
         if erro_mapeamento is not None:
