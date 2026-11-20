@@ -1,0 +1,13 @@
+{
+  "versao": "1.0",
+  "entidade": "filmes",
+  "campos": [
+    "título do filme",
+    "nome do idioma do filme"
+  ],
+  "filtros": {
+    "titulo": "ACADEMY DINOSAUR"
+  },
+  "agrupamento": [],
+  "agregacoes": []
+}
