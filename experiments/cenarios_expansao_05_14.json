@@ -47,16 +47,13 @@
   },
   {
     "id": "cenario_08",
-    "categoria": "Filtro por nome do rio",
+    "categoria": "Projeção dos rios sem filtros",
     "requisicao": {
       "entidade": "rios",
       "campos": [
         "nome do rio",
         "bacia hidrográfica"
-      ],
-      "filtros": {
-        "rio": "Rio Claro"
-      }
+      ]
     },
     "ordem_importa": false
   },
