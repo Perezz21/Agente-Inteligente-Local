@@ -38,7 +38,13 @@ class TestePrincipalPorArquivo(unittest.TestCase):
                 "tempo_geracao_sql_segundos": 0,
                 "tempo_execucao_mysql_segundos": 0,
                 "tentativas_sql": 1,
-                "interpretacao": {},
+                "interpretacao": {
+                    "carregamento_segundos": 0.0,
+                    "processamento_prompt_segundos": 0.0,
+                    "geracao_segundos": 0.0,
+                    "tokens_entrada": 10,
+                    "tokens_gerados": 10,
+                },
             },
         }
         with tempfile.TemporaryDirectory() as pasta:
