@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.agente.fluxo import executar_requisicao
+from src.agente.sql_generator import SQLGenerationError
 
 
 REQUISICAO = {"entidade": "medições", "campos": ["vazão"]}
@@ -124,6 +125,31 @@ class TesteFluxoPrincipal(unittest.TestCase):
             executar_requisicao(
                 REQUISICAO, ESTRUTURA, criar_modelo("{}"), Mock()
             )
+
+    @patch("src.agente.fluxo.SQLGenerator")
+    @patch("src.agente.fluxo.completar_interpretacao")
+    def test_08_falha_sql_mostra_mapeamento_sem_valores(
+        self, completar, classe_sql
+    ):
+        interpretacao = dict(INTERPRETACAO)
+        interpretacao["filtros"] = [
+            {"campo": "medicoes.data_medicao", "operador": "=", "valor": "privado"}
+        ]
+        completar.return_value = interpretacao
+        classe_sql.return_value.generate.side_effect = SQLGenerationError(
+            "Consulta inválida"
+        )
+        banco = Mock()
+        with self.assertRaises(SQLGenerationError) as resultado:
+            executar_requisicao(
+                REQUISICAO, ESTRUTURA,
+                criar_modelo(json.dumps(INTERPRETACAO)), banco,
+            )
+        mensagem = str(resultado.exception)
+        self.assertIn("medicoes.vazao_m3_s", mensagem)
+        self.assertIn("medicoes.data_medicao", mensagem)
+        self.assertNotIn("privado", mensagem)
+        banco.execute_select.assert_not_called()
 
     @patch("src.agente.fluxo.SQLGenerator")
     @patch("src.agente.fluxo.completar_interpretacao")
