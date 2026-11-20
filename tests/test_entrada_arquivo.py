@@ -12,9 +12,26 @@ class TesteEntradaPorArquivo(unittest.TestCase):
     def test_01_carrega_requisicao_valida(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "requisicao.json"
-            dados = {"entidade": "filmes", "campos": ["título do filme"]}
+            dados = {
+                "versao": "1.0",
+                "entidade": "filmes", "campos": ["título do filme"],
+                "filtros": {}, "agrupamento": [], "agregacoes": [],
+            }
             arquivo.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
-            self.assertEqual(receber_arquivo_json(arquivo), dados)
+            self.assertEqual(
+                receber_arquivo_json(arquivo),
+                {"entidade": "filmes", "campos": ["título do filme"]},
+            )
+
+    def test_05_rejeita_json_antigo_sem_versao(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            arquivo = Path(pasta) / "legado.json"
+            arquivo.write_text(
+                json.dumps({"entidade": "filmes", "campos": ["título"]}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "versao"):
+                receber_arquivo_json(arquivo)
 
     def test_02_rejeita_json_malformado(self):
         with tempfile.TemporaryDirectory() as pasta:
