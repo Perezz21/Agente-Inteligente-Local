@@ -11,6 +11,62 @@ from src.agente.ollama_client import OllamaModelClient
 from src.agente.esquema_geracao_sql import ESQUEMA_GERACAO_SQL
 
 
+def _estrutura_relevante(interpretacao: dict, estrutura: dict) -> dict:
+    """Reduz somente o contexto do modelo, nunca o esquema do validador.
+
+    Seleciona tabelas referenciadas pela interpretação e pelas FKs
+    necessárias, independentemente dos nomes do banco.
+    """
+    tabelas = estrutura.get("tabelas", {})
+    if not isinstance(tabelas, dict) or not tabelas:
+        return estrutura
+
+    nomes = {nome.casefold(): nome for nome in tabelas}
+    usadas = set()
+
+    def incluir_referencias(valor):
+        if isinstance(valor, str):
+            for nome, _ in re.findall(
+                r"(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]*)\\.([A-Za-z_][A-Za-z_0-9]*)",
+                valor,
+            ):
+                real = nomes.get(nome.casefold())
+                if real:
+                    usadas.add(real)
+        elif isinstance(valor, dict):
+            for parte in valor.values():
+                incluir_referencias(parte)
+        elif isinstance(valor, list):
+            for parte in valor:
+                incluir_referencias(parte)
+
+    for nome in interpretacao.get("tabelas_identificadas", []):
+        if isinstance(nome, str) and nome.casefold() in nomes:
+            usadas.add(nomes[nome.casefold()])
+
+    for chave in (
+        "campos_solicitados", "filtros", "relacionamentos_necessarios",
+        "agrupamento", "agregacoes",
+    ):
+        incluir_referencias(interpretacao.get(chave, []))
+
+    if not usadas or len(usadas) == len(tabelas):
+        return estrutura
+
+    relacionamentos = []
+    for relacao in estrutura.get("relacionamentos", []):
+        origem = relacao.get("origem", "").split(".", 1)[0]
+        destino = relacao.get("destino", "").split(".", 1)[0]
+        if origem in usadas and destino in usadas:
+            relacionamentos.append(relacao)
+
+    return {
+        "banco": estrutura.get("banco"),
+        "tabelas": {nome: dados for nome, dados in tabelas.items() if nome in usadas},
+        "relacionamentos": relacionamentos,
+    }
+
+
 class SQLGenerationError(RuntimeError):
     """Erro durante a geração ou validação da consulta SQL."""
 
@@ -29,10 +85,11 @@ class SQLGenerator:
         """Gera, valida e tenta corrigir automaticamente a consulta SQL."""
 
         max_tentativas = 3
+        estrutura_prompt = _estrutura_relevante(interpretacao, estrutura)
 
         prompt = self._build_initial_prompt(
             interpretacao,
-            estrutura,
+            estrutura_prompt,
         )
 
         ultimo_erro = ""
@@ -113,7 +170,7 @@ class SQLGenerator:
 
             prompt = self._build_repair_prompt(
                 interpretacao=interpretacao,
-                estrutura=estrutura,
+                estrutura=estrutura_prompt,
                 consulta_anterior=resposta_anterior,
                 erro=ultimo_erro,
             )
