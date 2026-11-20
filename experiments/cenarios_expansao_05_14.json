@@ -1,0 +1,181 @@
+[
+  {
+    "id": "cenario_05",
+    "categoria": "Projeção simples com filtro",
+    "requisicao": {
+      "entidade": "municípios",
+      "campos": [
+        "nome do município",
+        "UF",
+        "região"
+      ],
+      "filtros": {
+        "municipio": "Jataí"
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_06",
+    "categoria": "Projeção simples sem filtros",
+    "requisicao": {
+      "entidade": "municípios",
+      "campos": [
+        "nome do município",
+        "UF",
+        "região"
+      ]
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_07",
+    "categoria": "Filtros por município e ano",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "data da medição",
+        "vazão",
+        "nível do rio"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_08",
+    "categoria": "Filtro por nome do rio",
+    "requisicao": {
+      "entidade": "rios",
+      "campos": [
+        "nome do rio",
+        "bacia hidrográfica"
+      ],
+      "filtros": {
+        "rio": "Rio Claro"
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_09",
+    "categoria": "JOIN entre rios e municípios",
+    "requisicao": {
+      "entidade": "rios",
+      "campos": [
+        "nome do rio",
+        "bacia hidrográfica",
+        "nome do município de referência"
+      ],
+      "filtros": {
+        "municipio": "Jataí"
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_10",
+    "categoria": "JOIN entre indicadores e municípios",
+    "requisicao": {
+      "entidade": "indicadores",
+      "campos": [
+        "nome do indicador",
+        "valor",
+        "unidade"
+      ],
+      "filtros": {
+        "municipio": "Jataí"
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_11",
+    "categoria": "Dois JOINs e filtros combinados",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "data da medição",
+        "vazão",
+        "nome do rio",
+        "nome do município"
+      ],
+      "filtros": {
+        "rio": "Rio Claro",
+        "municipio": "Jataí",
+        "ano": 2025
+      }
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_12",
+    "categoria": "Agregação global AVG",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "média do nível do rio"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      },
+      "agregacoes": [
+        {
+          "funcao": "AVG",
+          "campo": "medicoes.nivel_m"
+        }
+      ]
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_13",
+    "categoria": "Agregação global MAX",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "maior vazão"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      },
+      "agregacoes": [
+        {
+          "funcao": "MAX",
+          "campo": "medicoes.vazao_m3_s"
+        }
+      ]
+    },
+    "ordem_importa": false
+  },
+  {
+    "id": "cenario_14",
+    "categoria": "AVG agrupada por rio",
+    "requisicao": {
+      "entidade": "medições",
+      "campos": [
+        "nome do rio",
+        "média da vazão"
+      ],
+      "filtros": {
+        "municipio": "Jataí",
+        "ano": 2025
+      },
+      "agrupamento": [
+        "rios.nome"
+      ],
+      "agregacoes": [
+        {
+          "funcao": "AVG",
+          "campo": "medicoes.vazao_m3_s"
+        }
+      ]
+    },
+    "ordem_importa": false
+  }
+]
