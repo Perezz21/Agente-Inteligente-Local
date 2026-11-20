@@ -8,6 +8,7 @@ import sqlglot
 from sqlglot import exp
 
 from src.agente.ollama_client import OllamaModelClient
+from src.agente.esquema_geracao_sql import ESQUEMA_GERACAO_SQL
 
 
 class SQLGenerationError(RuntimeError):
@@ -41,7 +42,8 @@ class SQLGenerator:
 
             resultado = self.modelo.generate(
                 prompt=prompt,
-                max_tokens=350,
+                max_tokens=700,
+                json_schema=ESQUEMA_GERACAO_SQL,
             )
 
             print(
@@ -102,7 +104,12 @@ class SQLGenerator:
             )
             print("Solicitando correção ao modelo local...")
 
-            resposta_anterior = resultado.content
+            # Não realimentar explicações longas ou malformadas ao modelo.
+            resposta_anterior = (
+                resultado.content if ultimo_erro !=
+                "O modelo não retornou um JSON válido para a consulta SQL."
+                else ""
+            )
 
             prompt = self._build_repair_prompt(
                 interpretacao=interpretacao,
@@ -237,8 +244,8 @@ REGRAS PARA A CORREÇÃO:
     exatamente na projeção do SELECT.
 15. Não substitua campos solicitados por IDs, chaves estrangeiras
     ou outras colunas, mesmo que representem a mesma entidade.
-16. Quando for solicitado rios.nome, selecione rios.nome.
-    Não substitua por medicoes.rio_id.
+16. Para toda coluna solicitada, selecione a própria coluna,
+    sem substituí-la por uma chave estrangeira ou identificador.
 17. Quando houver uma agregação solicitada, utilize a função e
     a coluna exatas indicadas na interpretação.
 18. Todos os filtros da interpretação devem aparecer na cláusula WHERE.
