@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.agente.esquema_geracao_sql import ESQUEMA_GERACAO_SQL
-from src.agente.sql_generator import SQLGenerator, SQLGenerationError
+from src.agente.sql_generator import (
+    SQLGenerator, SQLGenerationError, _remover_where_true_redundante,
+)
 
 
 ESTRUTURA = {
@@ -67,6 +69,47 @@ class TesteFormatoGeracaoSQL(unittest.TestCase):
         with self.assertRaisesRegex(SQLGenerationError, "3 tentativas"):
             SQLGenerator(modelo).generate(INTERPRETACAO, ESTRUTURA)
         self.assertEqual(modelo.generate.call_count, 3)
+
+    def test_05_where_true_redundante_e_removido_e_validado(self):
+        modelo = Mock()
+        modelo.generate.return_value = resposta(json.dumps({
+            "consulta_sql": "SELECT filme.titulo FROM filme WHERE TRUE",
+            "parametros": [],
+        }))
+        resultado = SQLGenerator(modelo).generate(INTERPRETACAO, ESTRUTURA)
+        self.assertEqual(resultado["consulta_sql"], "SELECT filme.titulo FROM filme")
+        self.assertEqual(resultado["parametros"], [])
+        self.assertEqual(resultado["tentativas_sql"], 1)
+
+    def test_06_where_true_nao_e_removido_quando_ha_filtros(self):
+        com_filtro = {
+            **INTERPRETACAO,
+            "filtros": [{"campo": "filme.titulo", "operador": "=", "valor": "A"}],
+        }
+        original = "SELECT filme.titulo FROM filme WHERE TRUE"
+        self.assertEqual(
+            _remover_where_true_redundante(original, [], com_filtro), original
+        )
+
+    def test_07_nao_remove_outras_condicoes_where(self):
+        original = "SELECT filme.titulo FROM filme WHERE filme.titulo = 'A'"
+        self.assertEqual(
+            _remover_where_true_redundante(original, [], INTERPRETACAO),
+            original,
+        )
+        modelo = Mock()
+        modelo.generate.return_value = resposta(json.dumps({
+            "consulta_sql": original, "parametros": [],
+        }))
+        with self.assertRaisesRegex(SQLGenerationError, "3 tentativas"):
+            SQLGenerator(modelo).generate(INTERPRETACAO, ESTRUTURA)
+
+    def test_08_nao_remove_where_true_se_ha_parametros(self):
+        original = "SELECT filme.titulo FROM filme WHERE TRUE"
+        self.assertEqual(
+            _remover_where_true_redundante(original, ["valor"], INTERPRETACAO),
+            original,
+        )
 
     def test_04_esquema_exige_sql_e_parametros(self):
         self.assertEqual(
