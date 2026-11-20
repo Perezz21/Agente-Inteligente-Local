@@ -136,7 +136,7 @@ class TesteValidacaoMapeamento(unittest.TestCase):
 
     def test_10_prompt_contem_quebras_reais_de_linha(self):
         prompt = montar_prompt(REQUISICAO, ESTRUTURA)
-        self.assertIn("\\nREQUISICAO DO USUARIO", prompt)
+        self.assertIn("\nREQUISICAO DO USUARIO", prompt)
         self.assertNotIn(r"\\nREQUISICAO DO USUARIO", prompt)
 
     def test_07_rejeita_apos_duas_interpretacoes_sem_colunas_validas(self):
