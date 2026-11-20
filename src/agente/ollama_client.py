@@ -52,8 +52,11 @@ class OllamaModelClient:
         system: str | None = None,
         max_tokens: int = 180,
         json_mode: bool = False,
+        json_schema: dict | None = None,
     ) -> GenerationResult:
         """Gera uma resposta e registra as métricas de execução do Ollama."""
+        if json_schema is not None and not isinstance(json_schema, dict):
+            raise ValueError("json_schema deve ser um objeto JSON Schema.")
         try:
             response = self.client.chat(
                 model=self.model,
@@ -75,7 +78,8 @@ class OllamaModelClient:
                     "num_predict": max_tokens,
                 },
                 keep_alive="10m",
-                **({"format": "json"} if json_mode else {}),
+                **({"format": json_schema} if json_schema is not None
+                   else {"format": "json"} if json_mode else {}),
             )
 
             def to_seconds(value: int | None) -> float | None:
