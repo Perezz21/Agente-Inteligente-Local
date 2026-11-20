@@ -116,6 +116,7 @@ def executar_requisicao(
         "observacoes",
     }
     interpretacao = None
+    erro_interpretacao = "O modelo não retornou JSON válido."
     resultado_modelo = None
     tentativas_interpretacao = 0
     for tentativa in range(1, 3):
@@ -130,8 +131,13 @@ def executar_requisicao(
         except (json.JSONDecodeError, TypeError):
             continue
         if not isinstance(candidato, dict):
+            erro_interpretacao = "A interpretação deve ser um objeto JSON."
             continue
-        if obrigatorios - candidato.keys():
+        faltantes = obrigatorios - candidato.keys()
+        if faltantes:
+            erro_interpretacao = (
+                f"Campos obrigatórios ausentes na interpretação: {sorted(faltantes)}"
+            )
             continue
         if not (
             isinstance(candidato["tabelas_identificadas"], list)
@@ -141,15 +147,13 @@ def executar_requisicao(
             and isinstance(candidato["status"], str)
             and isinstance(candidato["observacoes"], str)
         ):
+            erro_interpretacao = "Tipos inválidos na interpretação JSON."
             continue
         interpretacao = candidato
         break
 
     if interpretacao is None:
-        raise ValueError(
-            "O modelo não retornou um objeto JSON válido de interpretação "
-            "após 2 tentativas."
-        )
+        raise ValueError(erro_interpretacao + " Após 2 tentativas.")
 
     interpretacao = completar_interpretacao(
         requisicao, interpretacao, estrutura
