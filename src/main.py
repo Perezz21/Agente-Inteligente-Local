@@ -1,17 +1,21 @@
 """Ponto de entrada do Agente Inteligente Local (fluxo completo)."""
 
+import argparse
 import json
 import os
 
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
-from src.agente.entrada import receber_json
+from src.agente.entrada import receber_json, receber_arquivo_json
 from src.agente.fluxo import executar_requisicao
 from src.agente.ollama_client import OllamaModelClient, OllamaModelError
 from src.agente.registro_metricas import registrar_execucao
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Agente inteligente local MySQL")
+    parser.add_argument("--arquivo", help="Arquivo com uma requisição JSON")
+    args = parser.parse_args()
     banco = DatabaseClient()
     try:
         config = OllamaConfig.from_environment()
@@ -31,7 +35,10 @@ def main() -> None:
             f"{len(estrutura['relacionamentos'])} relacionamentos."
         )
 
-        requisicao = receber_json()
+        requisicao = (
+            receber_arquivo_json(args.arquivo)
+            if args.arquivo is not None else receber_json()
+        )
         print("\nInterpretando requisição e gerando consulta SQL...")
         resposta = executar_requisicao(
             requisicao=requisicao,
