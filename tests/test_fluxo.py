@@ -9,7 +9,9 @@ from src.agente.fluxo import executar_requisicao
 from src.agente.sql_generator import SQLGenerationError
 
 
-REQUISICAO = {"entidade": "medições", "campos": ["vazão"]}
+REQUISICAO = {
+    "versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+    "entidade": "medições", "campos": ["vazão"]}
 ESTRUTURA = {"tabelas": {}, "relacionamentos": []}
 INTERPRETACAO = {
     "tabelas_identificadas": ["medicoes"],
@@ -57,7 +59,7 @@ class TesteFluxoPrincipal(unittest.TestCase):
         self.assertGreaterEqual(saida["metricas"]["tempo_total_segundos"], 0)
         modelo.generate.assert_called_once()
         completar.assert_called_once_with(
-            REQUISICAO, INTERPRETACAO, ESTRUTURA
+            {"entidade": "medições", "campos": ["vazão"]}, INTERPRETACAO, ESTRUTURA
         )
         banco.execute_select.assert_called_once_with(
             consulta="SELECT medicoes.vazao_m3_s FROM medicoes",

@@ -94,11 +94,7 @@ cada `requisicao` dentro da lista deve obedecer a esse mesmo contrato.
   existentes no banco conectado.
 - **Geração SQL interna:** constrói e valida um SELECT e seus parâmetros.
 
-A interface pública exige v1.0. Existe uma **compatibilidade transitória
-interna** no `executar_requisicao` para testes históricos que chamam essa
-função Python diretamente com o formato antigo; ela **não é usada para aceitar
-arquivos JSON externos**. Essa compatibilidade deverá ser removida após a
-migração dos testes internos.
+O mesmo contrato vale para o terminal, arquivos, cenários experimentais e chamadas Python a `executar_requisicao`. O nome do arquivo é livre.
 
 A validação do formato não garante a correção semântica do mapeamento: a
 interpretação, a geração SQL e os resultados ainda precisam ser avaliados

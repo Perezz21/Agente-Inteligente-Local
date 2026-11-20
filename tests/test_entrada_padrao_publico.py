@@ -50,7 +50,7 @@ class TesteEntradaPublicaEstrita(unittest.TestCase):
         linhas = json.dumps(requi(), ensure_ascii=False, indent=2).splitlines()
         with patch("builtins.input", side_effect=linhas + [""]):
             recebida = receber_json()
-        self.assertEqual(recebida, {"entidade": "registros", "campos": ["nome"]})
+        self.assertEqual(recebida, requi())
 
     def test_03_entrada_interativa_recusa_legado(self):
         with patch("builtins.input", side_effect=[
@@ -81,8 +81,7 @@ class TesteEntradaPublicaEstrita(unittest.TestCase):
             )
             cenarios = carregar_cenarios(arquivo)
             self.assertEqual(
-                cenarios[0]["requisicao"],
-                {"entidade": "registros", "campos": ["nome"]},
+                cenarios[0]["requisicao"], requi(),
             )
 
     def test_06_rejeita_propriedade_nao_definida(self):

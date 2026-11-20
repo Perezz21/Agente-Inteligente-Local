@@ -7,5 +7,4 @@ O contrato validado é centralizado em
 `src/agente/contrato_requisicao.py`, e seu exemplo completo está em
 `experiments/requisicao_sakila_filmes_v1.json`.
 
-Os cenários anteriores sem `versao` continuam aceitos para preservar a
-compatibilidade dos experimentos existentes.
+Os cenários experimentais seguem o mesmo contrato de entrada.

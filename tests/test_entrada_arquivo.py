@@ -19,8 +19,7 @@ class TesteEntradaPorArquivo(unittest.TestCase):
             }
             arquivo.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
             self.assertEqual(
-                receber_arquivo_json(arquivo),
-                {"entidade": "filmes", "campos": ["título do filme"]},
+                receber_arquivo_json(arquivo), dados,
             )
 
     def test_05_rejeita_json_antigo_sem_versao(self):

@@ -61,7 +61,8 @@ class TestePrincipalPorArquivo(unittest.TestCase):
         receber_json.assert_not_called()
         self.assertEqual(
             executar.call_args.kwargs["requisicao"],
-            {"entidade": "filmes", "campos": ["título do filme"]},
+            {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+             "entidade": "filmes", "campos": ["título do filme"]},
         )
         banco.close.assert_called_once()
 

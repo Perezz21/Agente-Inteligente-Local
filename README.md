@@ -27,13 +27,14 @@ e é documentado em
 ```
 
 **Qualquer JSON fora dessa estrutura é rejeitado antes de conectar ao banco
-ou chamar o modelo local.** Os testes internos legados ainda têm uma camada
-temporária de compatibilidade que não é usada pelas entradas públicas.
+ou chamar o modelo local.** O mesmo padrão vale para pedidos colados no terminal,
+lidos de arquivo e enviados à função Python. Você pode usar qualquer nome de
+arquivo, como `pedido.json`, e reutilizá-lo para consultas diferentes.
 
 Após instalar `python -m pip install -r requirements.txt` e configurar MySQL/Ollama:
 
 ```powershell
-python -m src.main --arquivo experiments/requisicao_sakila_filmes_v1.json
+python -m src.main --arquivo pedido.json
 ```
 
 ## Escopo atual

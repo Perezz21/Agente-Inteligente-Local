@@ -1,7 +1,6 @@
 """Validação estrutural da entrada; nenhuma tabela de banco é codificada aqui.
 
 A fonte do contrato é schemas/requisicao_v1.schema.json.
-Requisições legadas são aceitas somente por chamadas internas explícitas.
 """
 
 import json
@@ -30,21 +29,12 @@ def _carregar_esquema() -> dict[str, Any]:
 ESQUEMA_REQUISICAO_V1 = _carregar_esquema()
 
 
-def normalizar_requisicao(
-    requisicao: dict[str, Any], *, permitir_legado: bool = False
-) -> dict[str, Any]:
-    """Valida JSON externo pelo contrato v1.0 e cria a representação interna.
-
-    Por padrão, qualquer entrada sem a versão/campos exigidos é rejeitada
-    antes de alcançar Ollama ou MySQL. O modo legado é reservado aos
-    componentes internos que ainda trabalham com requisições históricas.
-    """
+def validar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
+    """Verifica o contrato público e preserva o pedido completo."""
     if not isinstance(requisicao, dict):
         raise ValueError("A requisição deve ser um objeto JSON.")
 
     if "versao" not in requisicao:
-        if permitir_legado:
-            return requisicao
         raise ValueError(
             "JSON fora do padrão: propriedade obrigatória 'versao' ausente. "
             "Utilize o contrato JSON v1.0."
@@ -76,7 +66,12 @@ def normalizar_requisicao(
                 f"JSON fora do padrão: filtro {chave!r} contém número não finito."
             )
 
-    # Adapta a interface externa genérica ao contrato INTERNO já testado.
+    return requisicao
+
+
+def normalizar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
+    """Prepara um pedido válido para a etapa de interpretação."""
+    validar_requisicao(requisicao)
     normalizada = {
         "entidade": requisicao["entidade"],
         "campos": list(requisicao["campos"]),

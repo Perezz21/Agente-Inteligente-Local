@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.agente.contrato_requisicao import normalizar_requisicao
+from src.agente.contrato_requisicao import validar_requisicao
 
 
 def receber_json() -> dict[str, Any]:
@@ -47,7 +47,7 @@ def receber_json() -> dict[str, Any]:
     if not isinstance(requisicao, dict):
         raise ValueError("A requisição deve ser um objeto JSON.")
 
-    return normalizar_requisicao(requisicao)
+    return validar_requisicao(requisicao)
 
 
 def receber_arquivo_json(caminho: str | Path) -> dict[str, Any]:
@@ -64,4 +64,4 @@ def receber_arquivo_json(caminho: str | Path) -> dict[str, Any]:
         ) from exc
     if not isinstance(requisicao, dict):
         raise ValueError("A requisição deve ser um objeto JSON.")
-    return normalizar_requisicao(requisicao)
+    return validar_requisicao(requisicao)

@@ -46,7 +46,8 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         banco = Mock()
         banco.execute_select.return_value = [{"titulo": "Filme A"}]
         resultado = executar_requisicao(
-            {"entidade": "filmes", "campos": ["título"]},
+            {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+                 "entidade": "filmes", "campos": ["título"]},
             {"tabelas": {}, "relacionamentos": []},
             modelo, banco
         )
@@ -66,7 +67,8 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         banco = Mock()
         with self.assertRaisesRegex(ValueError, "JSON válido"):
             executar_requisicao(
-                {"entidade": "filmes", "campos": ["título"]},
+                {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+                 "entidade": "filmes", "campos": ["título"]},
                 {"tabelas": {}, "relacionamentos": []},
                 modelo, banco,
             )
@@ -80,7 +82,8 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         }))
         with self.assertRaisesRegex(ValueError, "Tipos inválidos"):
             executar_requisicao(
-                {"entidade": "filmes", "campos": ["título"]},
+                {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+                 "entidade": "filmes", "campos": ["título"]},
                 {"tabelas": {}, "relacionamentos": []},
                 modelo, Mock(),
             )

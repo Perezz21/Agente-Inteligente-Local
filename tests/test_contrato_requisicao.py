@@ -35,13 +35,15 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         })
         self.assertEqual(original, requisicao_v1())
 
-    def test_02_rejeita_legado_na_entrada_e_preserva_modo_interno(self):
+    def test_02_rejeita_legado_tambem_na_chamada_direta(self):
         antiga = {"entidade": "filmes", "campos": ["título do filme"]}
         with self.assertRaisesRegex(ValueError, "versao"):
             normalizar_requisicao(antiga)
-        self.assertIs(
-            normalizar_requisicao(antiga, permitir_legado=True), antiga
-        )
+        modelo, banco = Mock(), Mock()
+        with self.assertRaisesRegex(ValueError, "versao"):
+            executar_requisicao(antiga, {}, modelo, banco)
+        modelo.generate.assert_not_called()
+        banco.execute_select.assert_not_called()
 
     def test_03_valida_filtros_agrupamento_e_agregacoes(self):
         dados = requisicao_v1()
@@ -134,8 +136,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(
-                receber_arquivo_json(arquivo),
-                {"entidade": "filmes", "campos": ["título do filme"]},
+                receber_arquivo_json(arquivo), requisicao_v1(),
             )
 
     def test_14_exemplo_versionado_do_repositorio(self):
@@ -156,8 +157,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
             )
             cenarios = carregar_cenarios(arquivo)
         self.assertEqual(
-            cenarios[0]["requisicao"],
-            {"entidade": "filmes", "campos": ["título do filme"]},
+            cenarios[0]["requisicao"], requisicao_v1(),
         )
 
     @patch("src.agente.fluxo.SQLGenerator")

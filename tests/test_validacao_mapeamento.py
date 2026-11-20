@@ -22,7 +22,9 @@ ESTRUTURA = {
     },
     "relacionamentos": [],
 }
-REQUISICAO = {"entidade": "filmes", "campos": ["título do filme"]}
+REQUISICAO = {
+    "versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+    "entidade": "filmes", "campos": ["título do filme"]}
 
 
 def interpretacao(campos=None, filtros=None, tabelas=None):

@@ -10,7 +10,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from src.agente.avaliacao import avaliar_resultados
-from src.agente.contrato_requisicao import normalizar_requisicao
+from src.agente.contrato_requisicao import validar_requisicao
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.fluxo import executar_requisicao
@@ -37,7 +37,7 @@ def carregar_cenarios(caminho: Path) -> list[dict]:
             raise ValueError("IDs de cenários repetidos não são permitidos.")
         if not isinstance(requisicao, dict) or not requisicao:
             raise ValueError("Cada cenário precisa de uma requisicao JSON não vazia.")
-        requisicao = normalizar_requisicao(requisicao)
+        requisicao = validar_requisicao(requisicao)
         vistos.add(identificador)
         esperado = item.get("resultado_esperado")
         if "resultado_esperado" in item:

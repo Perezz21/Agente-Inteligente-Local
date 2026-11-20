@@ -67,9 +67,7 @@ def executar_requisicao(
     a conexão, permitindo execução automatizada e testes com mocks.
     """
     inicio = perf_counter()
-    # O fluxo recebe representação interna, já validada na entrada pública.
-    # Compatibilidade transitória para cenários/testes internos históricos.
-    requisicao = normalizar_requisicao(requisicao, permitir_legado=True)
+    requisicao = normalizar_requisicao(requisicao)
     prompt = montar_prompt(requisicao, estrutura)
     obrigatorios = {
         "tabelas_identificadas",
