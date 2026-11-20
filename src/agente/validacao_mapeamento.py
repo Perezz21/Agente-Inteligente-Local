@@ -5,7 +5,7 @@ from typing import Any
 
 
 _CAMPO = re.compile(
-    r"^(?:(?:AVG|SUM|MIN|MAX|COUNT)\\()?([A-Za-z_][\\w]*\\.[A-Za-z_][\\w]*)\\)?$",
+    r"^(?:(?:AVG|SUM|MIN|MAX|COUNT)\()?([A-Za-z_]\w*\.[A-Za-z_]\w*)\)?$",
     re.IGNORECASE,
 )
 
