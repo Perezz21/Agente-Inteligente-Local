@@ -4,6 +4,38 @@ Projeto de Trabalho de Conclusão de Curso em Ciência da Computação (UFJ).
 
 O objetivo é desenvolver um agente local em Python que recebe requisições estruturadas em JSON, interpreta seus parâmetros, realiza o mapeamento semântico com o esquema de um banco de dados relacional, gera e valida consultas SQL e recupera os registros solicitados.
 
+## Contrato obrigatório do JSON de entrada
+
+O agente **não possui um modelo de tabelas específico fixado no código**.
+Ele consulta o esquema do banco MySQL configurado em tempo de execução e
+interpreta uma requisição estruturada pelo contrato genérico v1.0.
+
+O contrato fica no arquivo
+[`schemas/requisicao_v1.schema.json`](schemas/requisicao_v1.schema.json)
+e é documentado em
+[`docs/contrato_requisicao_v1.md`](docs/contrato_requisicao_v1.md).
+
+```json
+{
+  "versao": "1.0",
+  "entidade": "filmes",
+  "campos": ["título do filme"],
+  "filtros": {},
+  "agrupamento": [],
+  "agregacoes": []
+}
+```
+
+**Qualquer JSON fora dessa estrutura é rejeitado antes de conectar ao banco
+ou chamar o modelo local.** Os testes internos legados ainda têm uma camada
+temporária de compatibilidade que não é usada pelas entradas públicas.
+
+Após instalar `python -m pip install -r requirements.txt` e configurar MySQL/Ollama:
+
+```powershell
+python -m src.main --arquivo experiments/requisicao_sakila_filmes_v1.json
+```
+
 ## Escopo atual
 
 - Receber requisições estruturadas em JSON.
