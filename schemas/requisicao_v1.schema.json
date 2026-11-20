@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Contrato de requisição do Agente Inteligente Local v1.0",
+  "description": "Define a estrutura de entrada sem fixar tabelas nem colunas de um banco de dados.",
+  "type": "object",
+  "properties": {
+    "versao": {
+      "const": "1.0"
+    },
+    "entidade": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "campos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "filtros": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "\\S"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "agrupamento": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z_0-9]*\\.[A-Za-z_][A-Za-z_0-9]*$"
+      }
+    },
+    "agregacoes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "funcao": {
+            "type": "string",
+            "enum": [
+              "AVG",
+              "SUM",
+              "MIN",
+              "MAX",
+              "COUNT"
+            ]
+          },
+          "campo": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z_0-9]*\\.[A-Za-z_][A-Za-z_0-9]*$"
+          }
+        },
+        "required": [
+          "funcao",
+          "campo"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "versao",
+    "entidade",
+    "campos",
+    "filtros",
+    "agrupamento",
+    "agregacoes"
+  ],
+  "additionalProperties": false
+}
