@@ -1,6 +1,7 @@
 """Geração e validação inicial de consultas SQL."""
 
 import json
+import os
 import re
 from typing import Any
 
@@ -106,13 +107,13 @@ class SQLGenerator:
         max_tentativas = 3
         estrutura_prompt = _estrutura_relevante(interpretacao, estrutura)
 
-        prompt = self._build_initial_prompt(
+        prompt_inicial = self._build_initial_prompt(
             interpretacao,
             estrutura_prompt,
         )
 
         ultimo_erro = ""
-        resposta_anterior = ""
+        prompt = prompt_inicial
 
         for tentativa in range(1, max_tentativas + 1):
 
@@ -122,10 +123,9 @@ class SQLGenerator:
                 json_schema=ESQUEMA_GERACAO_SQL,
             )
 
-            print(
-                f"\nRESPOSTA BRUTA DO MODELO - TENTATIVA {tentativa}"
-            )
-            print(resultado.content)
+            if os.getenv("AGENTE_DEPURAR_SQL") == "1":
+                print(f"\nRESPOSTA BRUTA DO MODELO - TENTATIVA {tentativa}")
+                print(resultado.content)
 
             try:
                 resposta = self._parse_model_response(
@@ -191,11 +191,10 @@ class SQLGenerator:
                 else ""
             )
 
-            prompt = self._build_repair_prompt(
-                interpretacao=interpretacao,
-                estrutura=estrutura_prompt,
-                consulta_anterior=resposta_anterior,
-                erro=ultimo_erro,
+            prompt = (
+                f"{prompt_inicial}\nCorrija a consulta rejeitada.\n"
+                f"ERRO ENCONTRADO:\n{ultimo_erro}\n"
+                f"RESPOSTA ANTERIOR:\n{resposta_anterior}"
             )
 
         raise SQLGenerationError(
@@ -245,30 +244,18 @@ disponíveis na estrutura do banco de dados.
 
 REGRAS OBRIGATÓRIAS:
 
-1. Gere somente consultas SELECT.
-2. Utilize apenas tabelas e colunas existentes no esquema informado.
-3. Utilize os relacionamentos fornecidos para construir os JOINs.
-4. Identifique as colunas com o nome completo da tabela correspondente.
-5. NÃO utilize aliases para tabelas.
-6. NÃO abrevie nomes de tabelas.
-7. Aliases para colunas são permitidos, utilizando AS.
-8. Quando houver nomes de colunas repetidos entre tabelas, utilize
-   aliases distintos para evitar ambiguidades no resultado.
-9. Utilize marcadores %s para os valores dos filtros.
-10. Os valores dos filtros devem ser enviados separadamente na lista
-    parametros, respeitando a ordem dos marcadores %s.
-11. Não insira valores diretamente na consulta SQL.
-12. Para filtros por ano, utilize YEAR(coluna) = %s.
-13. Quando houver funções de agregação, como AVG, SUM ou COUNT,
-    inclua todas as colunas selecionadas que não estejam agregadas
-    no GROUP BY.
-14. O GROUP BY deve utilizar os nomes completos das tabelas.
-15. Não invente tabelas, colunas ou relacionamentos.
-16. Não gere comentários SQL nem múltiplas instruções.
-17. Não utilize SELECT *.
-18. Não acrescente agrupamentos extras e preserve as agregações solicitadas.
-19. Se a interpretação tiver filtros vazios, NÃO escreva WHERE, nem WHERE TRUE.
-20. Se filtros estiverem vazios, parametros deve ser [].
+- Gere um único SELECT, sem comentários ou SELECT *.
+- Selecione exatamente os campos pedidos, com suas colunas e funções de
+  agregação originais. Não substitua os campos por identificadores.
+- Qualifique as colunas com o nome completo da tabela, sem aliases de tabela.
+  Use AS para distinguir colunas de saída com nomes repetidos.
+- Use exatamente os relacionamentos necessários da interpretação nos JOINs,
+  incluindo todos os componentes nas condições ON.
+- Preserve todos os campos, operadores e valores dos filtros solicitados.
+  Use um %s por filtro e forneça os valores em parametros na mesma ordem.
+  Para ANO_IGUAL use YEAR(coluna) = %s. Sem filtros, omita WHERE e use [].
+- Preserve o agrupamento solicitado. Ao combinar agregações e colunas
+  não agregadas, agrupe pelas colunas não agregadas. Não acrescente grupos.
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
 
@@ -277,77 +264,6 @@ Retorne exclusivamente um objeto JSON com as propriedades:
 - parametros: contendo uma lista com os valores dos filtros.
 
 Não inclua explicações, comentários ou blocos Markdown.
-
-INTERPRETAÇÃO:
-{json.dumps(interpretacao, ensure_ascii=False, indent=2)}
-
-ESTRUTURA DO BANCO:
-{json.dumps(estrutura, ensure_ascii=False, indent=2)}
-"""
-
-    @staticmethod
-    def _build_repair_prompt(
-        interpretacao: dict[str, Any],
-        estrutura: dict[str, Any],
-        consulta_anterior: str,
-        erro: str,
-    ) -> str:
-        """Monta um prompt para corrigir uma consulta rejeitada."""
-
-        return f"""
-A consulta SQL gerada anteriormente foi rejeitada pela validação.
-
-Você deve corrigir o problema identificado e gerar uma nova consulta.
-
-ERRO ENCONTRADO:
-{erro}
-
-RESPOSTA ANTERIOR:
-{consulta_anterior}
-
-REGRAS PARA A CORREÇÃO:
-
-1. Gere somente uma consulta SELECT válida para MySQL.
-2. Utilize exclusivamente as tabelas, colunas e relacionamentos informados.
-3. Preserve os filtros e os campos solicitados na interpretação.
-4. Utilize JOINs de acordo com os relacionamentos do banco.
-5. NÃO utilize aliases para tabelas.
-6. NÃO abrevie nomes de tabelas.
-7. Sempre identifique as colunas pelo nome completo da tabela.
-8. Aliases para colunas são permitidos, utilizando AS.
-9. Utilize marcadores %s para os valores dos filtros.
-10. Retorne os valores dos filtros na lista parametros,
-    respeitando a ordem correta.
-11. Quando houver funções de agregação e colunas não agregadas,
-    inclua as colunas não agregadas no GROUP BY.
-12. Não gere comentários SQL nem múltiplas instruções.
-13. Não utilize SELECT *.
-14. A lista de campos em campos_solicitados deve ser respeitada
-    exatamente na projeção do SELECT.
-15. Não substitua campos solicitados por IDs, chaves estrangeiras
-    ou outras colunas, mesmo que representem a mesma entidade.
-16. Para toda coluna solicitada, selecione a própria coluna,
-    sem substituí-la por uma chave estrangeira ou identificador.
-17. Quando houver uma agregação solicitada, utilize a função e
-    a coluna exatas indicadas na interpretação.
-18. Todos os filtros da interpretação devem aparecer na cláusula WHERE.
-19. Preserve exatamente os campos, operadores e valores dos filtros.
-20. Não remova, substitua ou acrescente filtros que não foram solicitados.
-21. Utilize um marcador %s para cada valor de filtro.
-22. Respeite a ordem dos parâmetros conforme a ordem das condições SQL.
-23. Para o operador ANO_IGUAL, utilize YEAR(campo) = %s.
-24. Preserve exatamente os relacionamentos necessários nos JOINs.
-25. Não omita, substitua ou acrescente relacionamentos nas condições ON.
-26. Preserve as funções e os campos exatos de cada agregação.
-27. O GROUP BY deve conter exatamente os campos de agrupamento solicitados.
-28. Não acrescente GROUP BY a consultas sem agregação ou agrupamento solicitado.
-29. Se filtros estiver vazio, não use WHERE, nem WHERE TRUE, e retorne parametros [].
-
-Retorne exclusivamente um objeto JSON contendo:
-- consulta_sql
-- parametros
-
-Não inclua explicações nem blocos Markdown.
 
 INTERPRETAÇÃO:
 {json.dumps(interpretacao, ensure_ascii=False, indent=2)}

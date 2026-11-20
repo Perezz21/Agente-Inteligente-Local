@@ -141,7 +141,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
 
     def test_14_exemplo_versionado_do_repositorio(self):
         raiz = Path(__file__).resolve().parents[1]
-        exemplo = raiz / "experiments" / "requisicao_sakila_filmes_v1.json"
+        exemplo = raiz / "experiments" / "requisicao_sakila_filmes.json"
         dados = json.loads(exemplo.read_text(encoding="utf-8"))
         self.assertEqual(dados, requisicao_v1())
         self.assertEqual(

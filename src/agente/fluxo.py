@@ -5,7 +5,7 @@ from time import perf_counter
 from typing import Any
 
 from src.agente.interpretacao import completar_interpretacao
-from src.agente.contrato_requisicao import normalizar_requisicao
+from src.agente.contrato_requisicao import compactar_requisicao_validada, validar_requisicao
 from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
 from src.agente.validacao_mapeamento import validar_mapeamento
 from src.agente.sql_generator import SQLGenerator, SQLGenerationError
@@ -66,8 +66,15 @@ def executar_requisicao(
     O banco deve estar conectado. A função não faz input/print nem encerra
     a conexão, permitindo execução automatizada e testes com mocks.
     """
+    return _executar_requisicao_validada(validar_requisicao(requisicao), estrutura, modelo, banco)
+
+
+def _executar_requisicao_validada(
+    requisicao: dict[str, Any], estrutura: dict[str, Any], modelo: Any, banco: Any,
+) -> dict[str, Any]:
+    """Uso interno após a validação da entrada."""
     inicio = perf_counter()
-    requisicao = normalizar_requisicao(requisicao)
+    requisicao = compactar_requisicao_validada(requisicao)
     prompt = montar_prompt(requisicao, estrutura)
     obrigatorios = {
         "tabelas_identificadas",

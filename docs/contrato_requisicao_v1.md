@@ -79,7 +79,7 @@ python -m pip install -r requirements.txt
 Rode a consulta:
 
 ```powershell
-python -m src.main --arquivo experiments/requisicao_sakila_filmes_v1.json
+python -m src.main --arquivo experiments/requisicao_sakila_filmes.json
 ```
 
 Também é possível executar `python -m src.main` e colar o JSON válido.

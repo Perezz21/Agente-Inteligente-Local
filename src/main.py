@@ -7,7 +7,7 @@ import os
 from src.agente.config import OllamaConfig
 from src.agente.database import DatabaseClient
 from src.agente.entrada import receber_json, receber_arquivo_json
-from src.agente.fluxo import executar_requisicao
+from src.agente.fluxo import _executar_requisicao_validada
 from src.agente.ollama_client import OllamaModelClient, OllamaModelError
 from src.agente.registro_metricas import registrar_execucao
 
@@ -41,7 +41,7 @@ def main() -> None:
         )
 
         print("\nInterpretando requisição e gerando consulta SQL...")
-        resposta = executar_requisicao(
+        resposta = _executar_requisicao_validada(
             requisicao=requisicao,
             estrutura=estrutura,
             modelo=modelo,

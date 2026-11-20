@@ -10,7 +10,7 @@ from src import main as modulo_main
 
 class TestePrincipalPorArquivo(unittest.TestCase):
     @patch("src.main.registrar_execucao")
-    @patch("src.main.executar_requisicao")
+    @patch("src.main._executar_requisicao_validada")
     @patch("src.main.receber_json")
     @patch("src.main.OllamaModelClient")
     @patch("src.main.OllamaConfig")

@@ -48,17 +48,17 @@ python -m src.main --arquivo pedido.json
 
 A conversão de linguagem natural para JSON, a criação de gráficos e a interface visual não fazem parte do agente.
 
-## Tecnologias previstas
+## Como o agente consulta o banco
 
-- Python
-- Ollama para execução local dos modelos de linguagem
-- MySQL
+O agente lê as tabelas, colunas e chaves estrangeiras do MySQL configurado.
+O Ollama interpreta o pedido com esses metadados e gera um SELECT parametrizado.
+O agente confere campos, filtros, junções e agrupamentos antes de executar a
+consulta. O terminal mostra a interpretação, o SQL aprovado e os registros.
 
-As bibliotecas e os modelos serão definidos e avaliados durante o desenvolvimento.
+Para investigar a geração, defina `AGENTE_DEPURAR_SQL=1` no arquivo `.env`.
+Esse modo exibe também as respostas brutas do modelo, incluindo parâmetros.
 
-## Primeira etapa
-
-A primeira etapa implementa somente a comunicação entre Python e o Ollama. A conexão com o MySQL e o processamento das requisições serão adicionados gradualmente.
+Veja a [configuração do MySQL e do Ollama](docs/configuracao-local.md).
 
 ## Requisitos
 

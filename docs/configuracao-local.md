@@ -40,7 +40,7 @@ Copy-Item .env.example .env
 
 ```powershell
 python -m src.testar_banco
-python -m src.testar_agente
+python -m src.main
 ```
 
 O projeto procura `.env` a partir da raiz do repositório, independentemente

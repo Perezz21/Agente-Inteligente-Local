@@ -5,7 +5,6 @@ A fonte do contrato é schemas/requisicao_v1.schema.json.
 
 import json
 import math
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +17,6 @@ _CAMINHO_SCHEMA = (
 )
 
 
-@lru_cache(maxsize=1)
 def _carregar_esquema() -> dict[str, Any]:
     """Carrega o contrato versionado, separado da lógica do agente."""
     esquema = json.loads(_CAMINHO_SCHEMA.read_text(encoding="utf-8"))
@@ -27,6 +25,7 @@ def _carregar_esquema() -> dict[str, Any]:
 
 
 ESQUEMA_REQUISICAO_V1 = _carregar_esquema()
+_VALIDADOR = Draft202012Validator(ESQUEMA_REQUISICAO_V1)
 
 
 def validar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
@@ -46,9 +45,8 @@ def validar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
             f"Utilize {VERSAO_REQUISICAO_ATUAL}."
         )
 
-    validador = Draft202012Validator(ESQUEMA_REQUISICAO_V1)
     erros = sorted(
-        validador.iter_errors(requisicao),
+        _VALIDADOR.iter_errors(requisicao),
         key=lambda e: (len(e.absolute_path), list(map(str, e.absolute_path))),
     )
     if erros:
@@ -71,7 +69,11 @@ def validar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
 
 def normalizar_requisicao(requisicao: dict[str, Any]) -> dict[str, Any]:
     """Prepara um pedido válido para a etapa de interpretação."""
-    validar_requisicao(requisicao)
+    return compactar_requisicao_validada(validar_requisicao(requisicao))
+
+
+def compactar_requisicao_validada(requisicao: dict[str, Any]) -> dict[str, Any]:
+    """Extrai do pedido validado os dados usados na interpretação."""
     normalizada = {
         "entidade": requisicao["entidade"],
         "campos": list(requisicao["campos"]),
