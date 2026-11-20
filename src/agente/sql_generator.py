@@ -79,7 +79,7 @@ def _remover_where_true_redundante(
     if parametros or interpretacao.get("filtros"):
         return consulta
     return re.sub(
-        r"\\s+WHERE\\s+TRUE\\s*;?\\s*$",
+        r"\s+WHERE\s+TRUE\s*;?\s*$",
         "",
         consulta,
         flags=re.IGNORECASE,
