@@ -120,7 +120,7 @@ class DatabaseClient:
                   AND REFERENCED_TABLE_NAME IS NOT NULL
                 ORDER BY TABLE_NAME, COLUMN_NAME
                 """,
-                ("agente_experimental",),
+                (os.getenv("MYSQL_DATABASE", "agente_experimental"),),
             )
 
             return cursor.fetchall()
