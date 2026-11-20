@@ -6,7 +6,7 @@ from typing import Any
 
 from src.agente.interpretacao import completar_interpretacao
 from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
-from src.agente.sql_generator import SQLGenerator
+from src.agente.sql_generator import SQLGenerator, SQLGenerationError
 
 
 def montar_prompt(requisicao: dict, estrutura: dict) -> str:
@@ -140,9 +140,24 @@ def executar_requisicao(
     fim_interpretacao = perf_counter()
 
     gerador = SQLGenerator(modelo)
-    consulta = gerador.generate(
-        interpretacao=interpretacao, estrutura=estrutura
-    )
+    try:
+        consulta = gerador.generate(
+            interpretacao=interpretacao, estrutura=estrutura
+        )
+    except SQLGenerationError as erro:
+        # Diagnóstico seguro: mostra mapeamentos, sem expor valores de filtros.
+        tabelas = interpretacao.get("tabelas_identificadas", [])
+        campos = interpretacao.get("campos_solicitados", [])
+        filtros = [
+            item.get("campo") for item in interpretacao.get("filtros", [])
+            if isinstance(item, dict)
+        ]
+        raise SQLGenerationError(
+            f"{erro}\\nInterpretação recebida pelo gerador:"
+            f"\\nTabelas: {tabelas!r}"
+            f"\\nCampos: {campos!r}"
+            f"\\nColunas dos filtros: {filtros!r}"
+        ) from erro
     fim_geracao_sql = perf_counter()
 
     registros = banco.execute_select(
