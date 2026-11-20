@@ -18,6 +18,11 @@ def main() -> None:
     args = parser.parse_args()
     banco = DatabaseClient()
     try:
+        # Rejeita JSON fora do contrato ANTES de iniciar Ollama ou MySQL.
+        requisicao = (
+            receber_arquivo_json(args.arquivo)
+            if args.arquivo is not None else receber_json()
+        )
         config = OllamaConfig.from_environment()
         modelo = OllamaModelClient(config)
         disponiveis = modelo.check_connection()
@@ -35,10 +40,6 @@ def main() -> None:
             f"{len(estrutura['relacionamentos'])} relacionamentos."
         )
 
-        requisicao = (
-            receber_arquivo_json(args.arquivo)
-            if args.arquivo is not None else receber_json()
-        )
         print("\nInterpretando requisição e gerando consulta SQL...")
         resposta = executar_requisicao(
             requisicao=requisicao,
