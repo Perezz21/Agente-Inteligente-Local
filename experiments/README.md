@@ -20,7 +20,7 @@ experimentos oficiais sem identificação adicional.
 | cenario_01 | Seleção e filtros com JOIN | 3 medições de Jataí em 2025, já verificadas |
 | cenario_02 | Agregação AVG com dois JOINs e GROUP BY | Rio Claro/Jataí, média de 21,10 m³/s, já verificada |
 | cenario_03 | Seleção e filtro em rios | Conferida no MySQL Workbench |
-| cenario_04 | JOIN entre indicadores e municípios | Pendente de conferência manual |
+| cenario_04 | JOIN entre indicadores e municípios | Conferida no MySQL Workbench |
 
 O arquivo `experiments/cenarios_piloto.json` contém as requisições.
 As referências dos cenários 03 e 04 foram adicionadas a partir de resultados
@@ -61,3 +61,71 @@ colunas extras, expressões diferentes ou valores divergentes.
 O mapeamento é específico do **avaliador experimental**; não é
 fornecido ao modelo na geração de SQL. A precisão final ainda depende
 de confirmar que as referências do banco estão corretas.
+
+## Ampliação gradual: cenários 05 a 14
+
+O arquivo `experiments/cenarios_expansao_05_14.json` contém **dez cenários
+novos**, sem `resultado_esperado` até que cada resultado seja verificado de
+forma independente no MySQL. A ausência dessas referências não significa que
+a execução esteja incorreta: ela ficará **sem avaliação**.
+
+| Cenário | Categoria |
+|---|---|
+| 05 | Projeção em municípios com filtro |
+| 06 | Projeção em municípios sem filtro |
+| 07 | Medições com filtros por município e ano |
+| 08 | Rios sem filtro |
+| 09 | Relacionamento entre rios e município de referência |
+| 10 | Indicadores filtrados por município |
+| 11 | Medições com dois JOINs e três filtros |
+| 12 | Média global do nível da água |
+| 13 | Vazão máxima |
+| 14 | Média da vazão agrupada por rio |
+
+### Conferência da estrutura (sem rodar o modelo)
+
+```powershell
+python -m src.executar_experimentos --arquivo experiments/cenarios_expansao_05_14.json --validar
+```
+
+Esperado: 10 cenários válidos, 0 com referência, 10 pendentes.
+
+### Referências: primeiros cenários a conferir no Workbench
+
+Estas SQLs são **candidatas de referência**, preparadas para conferência no
+banco, e não valores esperados já verificados.
+
+Cenário 05:
+
+```sql
+SELECT municipios.nome, municipios.uf, municipios.regiao
+FROM municipios
+WHERE municipios.nome = 'Jataí';
+```
+
+Cenário 06:
+
+```sql
+SELECT municipios.nome, municipios.uf, municipios.regiao
+FROM municipios;
+```
+
+Cenário 07:
+
+```sql
+SELECT medicoes.data_medicao, medicoes.vazao_m3_s, medicoes.nivel_m
+FROM medicoes INNER JOIN municipios
+  ON medicoes.municipio_id = municipios.id
+WHERE municipios.nome = 'Jataí'
+  AND YEAR(medicoes.data_medicao) = 2025;
+```
+
+Após consultar e verificar os resultados, registre as referências no JSON.
+Não use a resposta do agente como fonte da referência. Antes da bateria
+definitiva, fixe uma versão dos dados e documente os resultados oficiais.
+
+**Nota metodológica:** consultas sem `ORDER BY` são avaliadas sem considerar
+a ordem das linhas. Os casos 05 a 14 ainda são candidatos experimentais:
+alguns podem revelar limitações no interpretador ou no validador e precisar
+ser ajustados ou classificados em categorias específicas antes da aplicação
+a todos os modelos.
