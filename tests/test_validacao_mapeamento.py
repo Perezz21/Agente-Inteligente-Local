@@ -103,6 +103,42 @@ class TesteValidacaoMapeamento(unittest.TestCase):
         self.assertEqual(resposta["metricas"]["tentativas_interpretacao"], 2)
         self.assertEqual(resposta["total_registros"], 1)
 
+    @patch("src.agente.fluxo.SQLGenerator")
+    @patch("src.agente.fluxo.completar_interpretacao")
+    def test_08_status_ambiguo_recupera_na_segunda_tentativa(
+        self, completar, sql_generator
+    ):
+        completar.return_value = interpretacao()
+        sql_generator.return_value.generate.return_value = {
+            "consulta_sql": "SELECT filme.titulo FROM filme", "parametros": [],
+        }
+        primeiro = interpretacao()
+        primeiro["status"] = "ambiguo"
+        primeiro["observacoes"] = "Não encontrei a coluna."
+        modelo = Mock()
+        modelo.generate.side_effect = [retorno(primeiro), retorno(interpretacao())]
+        banco = Mock()
+        banco.execute_select.return_value = [{"titulo": "Filme A"}]
+        resposta = executar_requisicao(REQUISICAO, ESTRUTURA, modelo, banco)
+        self.assertEqual(resposta["metricas"]["tentativas_interpretacao"], 2)
+        self.assertIn("Não encontrei a coluna", modelo.generate.call_args.kwargs["prompt"])
+
+    def test_09_status_ambiguo_exibe_motivo_sem_gerar_sql(self):
+        primeiro = interpretacao()
+        primeiro["status"] = "ambiguo"
+        primeiro["observacoes"] = "Há mais de uma coluna possível."
+        modelo = Mock()
+        modelo.generate.return_value = retorno(primeiro)
+        banco = Mock()
+        with self.assertRaisesRegex(ValueError, "Há mais de uma coluna possível"):
+            executar_requisicao(REQUISICAO, ESTRUTURA, modelo, banco)
+        banco.execute_select.assert_not_called()
+
+    def test_10_prompt_contem_quebras_reais_de_linha(self):
+        prompt = montar_prompt(REQUISICAO, ESTRUTURA)
+        self.assertIn("\\nREQUISICAO DO USUARIO", prompt)
+        self.assertNotIn(r"\\nREQUISICAO DO USUARIO", prompt)
+
     def test_07_rejeita_apos_duas_interpretacoes_sem_colunas_validas(self):
         modelo = Mock()
         modelo.generate.return_value = retorno(
