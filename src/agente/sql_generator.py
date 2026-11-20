@@ -67,6 +67,25 @@ def _estrutura_relevante(interpretacao: dict, estrutura: dict) -> dict:
     }
 
 
+
+def _remover_where_true_redundante(
+    consulta: str, parametros: list, interpretacao: dict
+) -> str:
+    """Normaliza exclusivamente WHERE TRUE final, sem filtros solicitados.
+
+    Não modifica outras expressões WHERE nem consultas parametrizadas.
+    A consulta resultante ainda passa integralmente pelo validador SQL.
+    """
+    if parametros or interpretacao.get("filtros"):
+        return consulta
+    return re.sub(
+        r"\\s+WHERE\\s+TRUE\\s*;?\\s*$",
+        "",
+        consulta,
+        flags=re.IGNORECASE,
+    )
+
+
 class SQLGenerationError(RuntimeError):
     """Erro durante a geração ou validação da consulta SQL."""
 
@@ -125,6 +144,10 @@ class SQLGenerator:
                     raise SQLGenerationError(
                         "Os parâmetros da consulta devem ser uma lista."
                     )
+
+                consulta = _remover_where_true_redundante(
+                    consulta, parametros, interpretacao
+                )
 
                 self._validate_query(
                     consulta,
@@ -244,6 +267,8 @@ REGRAS OBRIGATÓRIAS:
 16. Não gere comentários SQL nem múltiplas instruções.
 17. Não utilize SELECT *.
 18. Não acrescente agrupamentos extras e preserve as agregações solicitadas.
+19. Se a interpretação tiver filtros vazios, NÃO escreva WHERE, nem WHERE TRUE.
+20. Se filtros estiverem vazios, parametros deve ser [].
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
 
@@ -316,6 +341,7 @@ REGRAS PARA A CORREÇÃO:
 26. Preserve as funções e os campos exatos de cada agregação.
 27. O GROUP BY deve conter exatamente os campos de agrupamento solicitados.
 28. Não acrescente GROUP BY a consultas sem agregação ou agrupamento solicitado.
+29. Se filtros estiver vazio, não use WHERE, nem WHERE TRUE, e retorne parametros [].
 
 Retorne exclusivamente um objeto JSON contendo:
 - consulta_sql
