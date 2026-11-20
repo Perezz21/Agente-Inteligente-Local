@@ -153,10 +153,10 @@ def executar_requisicao(
             if isinstance(item, dict)
         ]
         raise SQLGenerationError(
-            f"{erro}\\nInterpretação recebida pelo gerador:"
-            f"\\nTabelas: {tabelas!r}"
-            f"\\nCampos: {campos!r}"
-            f"\\nColunas dos filtros: {filtros!r}"
+            f"{erro}\nInterpretação recebida pelo gerador:"
+            f"\nTabelas: {tabelas!r}"
+            f"\nCampos: {campos!r}"
+            f"\nColunas dos filtros: {filtros!r}"
         ) from erro
     fim_geracao_sql = perf_counter()
 
