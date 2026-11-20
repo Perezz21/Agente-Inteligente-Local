@@ -5,6 +5,7 @@ from time import perf_counter
 from typing import Any
 
 from src.agente.interpretacao import completar_interpretacao
+from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
 from src.agente.sql_generator import SQLGenerator
 
 
@@ -40,34 +41,11 @@ REGRAS OBRIGATÓRIAS:
 11. Se não houver informação suficiente, indique a ambiguidade
     no campo observacoes e utilize status "ambiguo".
 
-EXEMPLO DE MAPEAMENTO:
-
-Se a requisição solicitar medições do município Jataí em 2025,
-e o banco possuir:
-- medicoes.municipio_id
-- medicoes.data_medicao
-- municipios.id
-- municipios.nome
-
-O mapeamento correto dos filtros será:
-
-"filtros": [
-    {{
-        "campo": "municipios.nome",
-        "operador": "=",
-        "valor": "Jataí"
-    }},
-    {{
-        "campo": "medicoes.data_medicao",
-        "operador": "ANO_IGUAL",
-        "valor": 2025
-    }}
-]
-
-O relacionamento necessário será:
-
-"origem": "medicoes.municipio_id",
-"destino": "municipios.id"
+EXEMPLO GENÉRICO DE MAPEAMENTO:
+Se a requisição pedir um atributo, identifique sua coluna no
+esquema fornecido e retorne o nome completo tabela.coluna.
+Use [] para filtros e relacionamentos quando não forem necessários.
+Não descreva o banco nem faça uma análise narrativa.
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
 
@@ -125,6 +103,7 @@ def executar_requisicao(
             prompt=prompt,
             max_tokens=1200,
             json_mode=True,
+            json_schema=ESQUEMA_INTERPRETACAO,
         )
         try:
             candidato = json.loads(resultado_modelo.content)
