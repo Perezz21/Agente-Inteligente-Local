@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from src.agente.fluxo import executar_requisicao
 from src.agente.ollama_client import OllamaModelClient
 from src.agente.config import OllamaConfig
+from src.agente.esquema_interpretacao import ESQUEMA_INTERPRETACAO
 
 
 INTERPRETACAO = {
@@ -53,6 +54,10 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         self.assertEqual(modelo.generate.call_count, 2)
         self.assertEqual(modelo.generate.call_args.kwargs["max_tokens"], 1200)
         self.assertTrue(modelo.generate.call_args.kwargs["json_mode"])
+        self.assertEqual(
+            modelo.generate.call_args.kwargs["json_schema"],
+            ESQUEMA_INTERPRETACAO,
+        )
         banco.execute_select.assert_called_once()
 
     def test_02_nao_executa_sql_se_interpretacao_invalida(self):
@@ -95,6 +100,30 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         resultado = modelo.generate("teste", json_mode=True)
         self.assertEqual(resultado.content, '{"status":"sucesso"}')
         self.assertEqual(cliente.return_value.chat.call_args.kwargs["format"], "json")
+
+    @patch("src.agente.ollama_client.Client")
+    def test_06_envia_json_schema_ao_ollama(self, cliente):
+        resposta = Mock()
+        resposta.message.content = json.dumps(INTERPRETACAO)
+        resposta.load_duration = None
+        resposta.prompt_eval_duration = None
+        resposta.eval_duration = None
+        resposta.prompt_eval_count = None
+        resposta.eval_count = None
+        cliente.return_value.chat.return_value = resposta
+        modelo = OllamaModelClient(OllamaConfig(model="modelo:teste"))
+        modelo.generate("teste", json_schema=ESQUEMA_INTERPRETACAO)
+        self.assertEqual(
+            cliente.return_value.chat.call_args.kwargs["format"],
+            ESQUEMA_INTERPRETACAO,
+        )
+
+    def test_07_esquema_exige_todas_as_chaves(self):
+        self.assertEqual(
+            set(ESQUEMA_INTERPRETACAO["required"]),
+            set(INTERPRETACAO),
+        )
+        self.assertFalse(ESQUEMA_INTERPRETACAO["additionalProperties"])
 
     @patch("src.agente.ollama_client.Client")
     def test_05_modo_json_nao_afeta_geracao_sql(self, cliente):
