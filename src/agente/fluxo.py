@@ -37,7 +37,11 @@ def montar_prompt(requisicao: dict, estrutura: dict) -> str:
         "Retorne somente o JSON de interpretação com as chaves "
         "tabelas_identificadas, campos_solicitados, filtros, "
         "relacionamentos_necessarios, status e observacoes.\n"
-        "Formato dos filtros: {campo, operador, valor}. "
+        "Mantenha os campos na ordem do pedido e respeite identificadores explícitos. "
+        "Mapeie cada chave de filtros exatamente uma vez, preservando valor e tipo. "
+        "Formato dos filtros: {chave_pedida, campo, operador, valor}. "
+        "Copie chave_pedida literalmente da requisição. "
+        "Para uma chave estrangeira composta, inclua todos os pares da restrição. "
         "Formato dos JOINs: {origem, destino}.\n"
         "CATALOGO (não copiar para a resposta):\n"
         + json.dumps(

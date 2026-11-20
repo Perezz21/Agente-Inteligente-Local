@@ -9,6 +9,12 @@ from unittest.mock import Mock, patch
 from src.executar_experimentos import carregar_cenarios, executar_cenarios
 
 
+PEDIDO = {
+    "versao": "1.0", "entidade": "medicoes", "campos": ["id"],
+    "filtros": {}, "agrupamento": [], "agregacoes": [],
+}
+
+
 class TesteCenariosExperimentais(unittest.TestCase):
     def criar_arquivo(self, pasta, dados):
         arquivo = Path(pasta) / "cenarios.json"
@@ -18,15 +24,15 @@ class TesteCenariosExperimentais(unittest.TestCase):
     def test_01_carrega_lista_valida(self):
         with tempfile.TemporaryDirectory() as pasta:
             caminho = self.criar_arquivo(
-                pasta, [{"id": "cenario_01", "requisicao": {"entidade": "medicoes"}}]
+                pasta, [{"id": "cenario_01", "requisicao": PEDIDO}]
             )
             self.assertEqual(carregar_cenarios(caminho)[0]["id"], "cenario_01")
 
     def test_02_rejeita_identificadores_repetidos(self):
         with tempfile.TemporaryDirectory() as pasta:
             caminho = self.criar_arquivo(pasta, [
-                {"id": "mesmo", "requisicao": {"a": 1}},
-                {"id": "mesmo", "requisicao": {"a": 2}},
+                {"id": "mesmo", "requisicao": PEDIDO},
+                {"id": "mesmo", "requisicao": PEDIDO},
             ])
             with self.assertRaisesRegex(ValueError, "repetidos"):
                 carregar_cenarios(caminho)

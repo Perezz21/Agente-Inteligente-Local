@@ -50,7 +50,8 @@ class TestePrincipalPorArquivo(unittest.TestCase):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "consulta.json"
             arquivo.write_text(
-                '{"entidade":"filmes","campos":["título do filme"]}',
+                '{"versao":"1.0","entidade":"filmes","campos":["título do filme"],'
+                '"filtros":{},"agrupamento":[],"agregacoes":[]}' ,
                 encoding="utf-8",
             )
             with patch("sys.argv", ["main", "--arquivo", str(arquivo)]):

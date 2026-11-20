@@ -50,6 +50,33 @@ class TesteValidacaoMapeamento(unittest.TestCase):
             interpretacao(), REQUISICAO, ESTRUTURA
         ))
 
+    def test_filtros_preservam_chave_valor_tipo_e_coluna_explicita(self):
+        pedido = {**REQUISICAO, "filtros": {"filme.id": 1}}
+        filtro = {"chave_pedida": "filme.id", "campo": "filme.id",
+                  "operador": "=", "valor": 1}
+        self.assertIsNone(validar_mapeamento(
+            interpretacao(filtros=[filtro]), pedido, ESTRUTURA))
+        for filtros in ([], [filtro, filtro], [{**filtro, "valor": True}],
+                        [{**filtro, "valor": 2}], [{**filtro, "campo": "pessoa.nome"}],
+                        [{**filtro, "chave_pedida": "outro"}]):
+            with self.subTest(filtros=filtros):
+                self.assertIsNotNone(validar_mapeamento(
+                    interpretacao(filtros=filtros), pedido, ESTRUTURA))
+
+    def test_campo_explicito_nao_pode_ser_substituido(self):
+        for nome in ("filme.titulo", "titulo"):
+            pedido = {**REQUISICAO, "campos": [nome]}
+            self.assertIsNotNone(validar_mapeamento(
+                interpretacao(campos=["filme.id"]), pedido, ESTRUTURA))
+
+    def test_filtro_omitido_impede_execucao(self):
+        pedido = {**REQUISICAO, "filtros": {"ano": 2020}}
+        modelo, banco = Mock(), Mock()
+        modelo.generate.return_value = retorno(interpretacao())
+        with self.assertRaisesRegex(ValueError, "Filtros solicitados ausentes"):
+            executar_requisicao(pedido, ESTRUTURA, modelo, banco)
+        banco.execute_select.assert_not_called()
+
     def test_02_rejeita_metadados_sem_tabela(self):
         erro = validar_mapeamento(
             interpretacao(campos=["tipo", "permite_nulo", "chave"]),

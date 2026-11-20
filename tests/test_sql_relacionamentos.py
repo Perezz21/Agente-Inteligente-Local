@@ -103,6 +103,20 @@ class TesteRelacionamentosJoin(unittest.TestCase):
         with self.assertRaisesRegex(SQLGenerationError, mensagem):
             self.validar(consulta)
 
+    def test_chave_composta_exige_os_dois_pares_no_mesmo_join(self):
+        pares = [
+            {"origem": "a.id", "destino": "b.id", "restricao": "fk_ab"},
+            {"origem": "a.loja", "destino": "b.loja", "restricao": "fk_ab"},
+        ]
+        estrutura = {"tabelas": {t: {"colunas": [{"nome": "id"}, {"nome": "loja"}]}
+                                 for t in ("a", "b")}, "relacionamentos": pares}
+        pedido = {"campos_solicitados": ["a.id"], "relacionamentos_necessarios": pares}
+        sql = "SELECT a.id FROM a JOIN b ON a.id = b.id"
+        SQLGenerator._validate_query(sql + " AND a.loja = b.loja", [], estrutura, pedido)
+        with self.assertRaisesRegex(SQLGenerationError, "composta incompleta"):
+            SQLGenerator._validate_query(sql, [], estrutura, {
+                **pedido, "relacionamentos_necessarios": pares[:1]})
+
     def test_01_aceita_relacionamentos_corretos(self):
         self.validar(SELECT + JOIN_RIO + JOIN_MUNICIPIO + WHERE)
 

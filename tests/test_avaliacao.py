@@ -61,7 +61,9 @@ class TesteAvaliacao(unittest.TestCase):
             avaliar_resultados({}, [])
 
     def test_09_carrega_referencia_e_ordenacao(self):
-        dados = [{"id": "cenario_01", "requisicao": {"entidade": "teste"},
+        dados = [{"id": "cenario_01", "requisicao": {
+            "versao": "1.0", "entidade": "teste", "campos": ["id"],
+            "filtros": {}, "agrupamento": [], "agregacoes": []},
                   "resultado_esperado": [{"id": 1}], "ordem_importa": True}]
         with tempfile.TemporaryDirectory() as pasta:
             caminho = Path(pasta) / "casos.json"

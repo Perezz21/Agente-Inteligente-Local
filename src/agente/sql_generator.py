@@ -879,16 +879,24 @@ ESTRUTURA DO BANCO:
                 "A interpretação contém relacionamentos inexistentes no banco."
             )
 
+        restricoes = {}
+        for relacao in estrutura.get("relacionamentos", []):
+            origem, destino = relacao["origem"], relacao["destino"]
+            par = normalizar_relacionamento(origem, destino)
+            # Catálogos anteriores registravam apenas pares individuais.
+            chave = (origem.split(".")[0], relacao.get("restricao", par))
+            restricoes.setdefault(chave, set()).add(par)
+
         encontrados = set()
 
-        def analisar_on(condicao: exp.Expression) -> None:
+        def analisar_on(condicao: exp.Expression, pares: set) -> None:
             if isinstance(condicao, exp.Paren):
-                analisar_on(condicao.this)
+                analisar_on(condicao.this, pares)
                 return
 
             if isinstance(condicao, exp.And):
-                analisar_on(condicao.this)
-                analisar_on(condicao.expression)
+                analisar_on(condicao.this, pares)
+                analisar_on(condicao.expression, pares)
                 return
 
             if not isinstance(condicao, exp.EQ):
@@ -919,7 +927,7 @@ ESTRUTURA DO BANCO:
                     "O JOIN usa uma tabela não reconhecida."
                 )
 
-            encontrados.add(
+            pares.add(
                 normalizar_relacionamento(
                     f"{tabela_esquerda}.{esquerda.name}",
                     f"{tabela_direita}.{direita.name}",
@@ -934,7 +942,15 @@ ESTRUTURA DO BANCO:
                     "JOIN sem condição ON não é permitido."
                 )
 
-            analisar_on(condicao_on)
+            pares = set()
+            analisar_on(condicao_on, pares)
+            cobertos = set()
+            for componentes in restricoes.values():
+                if componentes <= pares:
+                    cobertos.update(componentes)
+            if (pares & permitidos) - cobertos:
+                raise SQLGenerationError("JOIN com chave estrangeira composta incompleta.")
+            encontrados.update(pares)
 
         faltantes = esperados - encontrados
         extras = encontrados - esperados

@@ -113,12 +113,15 @@ class DatabaseClient:
                 SELECT
                     TABLE_NAME,
                     COLUMN_NAME,
+                    CONSTRAINT_NAME,
+                    ORDINAL_POSITION,
                     REFERENCED_TABLE_NAME,
                     REFERENCED_COLUMN_NAME
                 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
                 WHERE TABLE_SCHEMA = %s
+                  AND REFERENCED_TABLE_SCHEMA = TABLE_SCHEMA
                   AND REFERENCED_TABLE_NAME IS NOT NULL
-                ORDER BY TABLE_NAME, COLUMN_NAME
+                ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION
                 """,
                 (os.getenv("MYSQL_DATABASE", "agente_experimental"),),
             )
@@ -146,6 +149,8 @@ class DatabaseClient:
             "tabelas": tabelas,
             "relacionamentos": [
                 {
+                    "restricao": relacao["CONSTRAINT_NAME"],
+                    "posicao": relacao["ORDINAL_POSITION"],
                     "origem": (
                         f"{relacao['TABLE_NAME']}."
                         f"{relacao['COLUMN_NAME']}"

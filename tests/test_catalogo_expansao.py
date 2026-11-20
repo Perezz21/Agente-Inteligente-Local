@@ -35,7 +35,7 @@ class TesteCatalogoExpandido(unittest.TestCase):
 
     def test_04_agregacoes_explicitamente_estruturadas(self):
         raw = json.loads(EXPANSAO.read_text(encoding="utf-8"))
-        agregados = [c for c in raw if "agregacoes" in c["requisicao"]]
+        agregados = [c for c in raw if c["requisicao"]["agregacoes"]]
         self.assertEqual(len(agregados), 3)
         self.assertEqual(
             {item["requisicao"]["agregacoes"][0]["funcao"] for item in agregados},
@@ -55,10 +55,10 @@ class TesteCatalogoExpandido(unittest.TestCase):
             for c in raw
         ))
         self.assertTrue(any(
-            "agrupamento" in c["requisicao"] for c in raw
+            c["requisicao"]["agrupamento"] for c in raw
         ))
         self.assertTrue(any(
-            "filtros" not in c["requisicao"] for c in raw
+            not c["requisicao"]["filtros"] for c in raw
         ))
         self.assertTrue(any(
             c["requisicao"].get("filtros", {}).get("ano") == 2025

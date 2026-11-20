@@ -56,7 +56,7 @@ class TesteConfiguracaoEnv(unittest.TestCase):
         load_local_environment()
         arquivo = carregar.call_args.kwargs["dotenv_path"]
         self.assertEqual(arquivo.name, ".env")
-        self.assertEqual(arquivo.parent.name, "Agente-Inteligente-Local")
+        self.assertEqual(arquivo.parent, Path(__file__).resolve().parents[1])
         self.assertFalse(carregar.call_args.kwargs["override"])
 
 

@@ -18,11 +18,12 @@ ESQUEMA_INTERPRETACAO = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "chave_pedida": {"type": "string"},
                     "campo": {"type": "string"},
                     "operador": {"type": "string"},
                     "valor": {"type": ["string", "integer", "number", "boolean", "null"]},
                 },
-                "required": ["campo", "operador", "valor"],
+                "required": ["chave_pedida", "campo", "operador", "valor"],
                 "additionalProperties": False,
             },
         },
