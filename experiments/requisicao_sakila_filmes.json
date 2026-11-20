@@ -1,6 +1,10 @@
 {
+  "versao": "1.0",
   "entidade": "filmes",
   "campos": [
     "título do filme"
-  ]
+  ],
+  "filtros": {},
+  "agrupamento": [],
+  "agregacoes": []
 }
