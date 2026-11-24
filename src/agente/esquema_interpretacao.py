@@ -1,7 +1,7 @@
 """Contrato de saída estruturada para a etapa de interpretação do agente.
 
 Independente do esquema de qualquer banco MySQL. Não confundir com o
-futuro contrato versionado do JSON de entrada.
+contrato público do JSON de entrada.
 """
 
 ESQUEMA_INTERPRETACAO = {
@@ -19,7 +19,11 @@ ESQUEMA_INTERPRETACAO = {
                 "type": "object",
                 "properties": {
                     "chave_pedida": {"type": "string"},
-                    "campo": {"type": "string"},
+                    "campo": {
+                        "type": "string",
+                        "description": "Coluna qualificada do catálogo, no formato tabela.coluna.",
+                        "pattern": r"^[^.\s]+\.[^.\s]+$",
+                    },
                     "operador": {"type": "string"},
                     "valor": {"type": ["string", "integer", "number", "boolean", "null"]},
                 },

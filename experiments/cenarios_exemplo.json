@@ -37,6 +37,12 @@
         "nome": "Jataí"
       }
     ],
-    "ordem_importa": false
+    "ordem_importa": false,
+    "colunas_referencia": {
+      "medicoes.data_medicao": "data_medicao",
+      "medicoes.vazao_m3_s": "vazao_m3_s",
+      "medicoes.nivel_m": "nivel_m",
+      "municipios.nome": "nome"
+    }
   }
 ]

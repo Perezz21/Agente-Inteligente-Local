@@ -47,7 +47,7 @@ FROM_WHERE = (
 )
 PARAMETROS = ["Jataí", "Rio Claro", 2025]
 CAMPOS = (
-    "SELECT rios.nome, municipios.nome, "
+    "SELECT rios.nome AS rio, municipios.nome AS municipio, "
     "AVG(medicoes.vazao_m3_s)"
 )
 GROUP = " GROUP BY rios.nome, municipios.nome"
@@ -121,7 +121,7 @@ class TesteAgregacoes(unittest.TestCase):
         interpretacao["agregacoes"] = []
         interpretacao["agrupamento"] = []
         self.rejeita(
-            "SELECT rios.nome, municipios.nome" + FROM_WHERE + GROUP,
+            "SELECT rios.nome AS rio, municipios.nome AS municipio" + FROM_WHERE + GROUP,
             "GROUP BY diferente",
             interpretacao,
         )

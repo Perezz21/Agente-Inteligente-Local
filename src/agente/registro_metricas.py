@@ -41,6 +41,12 @@ def construir_registro(
         "rodada_id": rodada_id,
         "avaliacao": avaliacao,
         "status": "sucesso",
+        "sql_sintaticamente_valida": True,
+        "sql_aprovada": True,
+        "consulta_executada": True,
+        "resultado": ("sem_referencia" if avaliacao is None
+                      else "correto" if avaliacao["correto"] else "divergente"),
+        "tentativas_interpretacao": metricas.get("tentativas_interpretacao"),
         "total_registros": resposta["total_registros"],
         "tentativas_sql": metricas.get("tentativas_sql"),
         "tempo_total_segundos": metricas["tempo_total_segundos"],

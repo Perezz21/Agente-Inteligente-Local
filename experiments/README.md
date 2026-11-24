@@ -51,16 +51,21 @@ que não deve ser versionado. O campo `status=sucesso` indica execução sem
 falha técnica. O campo `avaliacao.correto` indica coincidência com a
 referência, quando ela existe.
 
-**Aliases SQL:** nos cenários 03 e 04, `colunas_referencia`
-associa cada coluna de origem (por exemplo, `rios.nome`) ao nome do
-campo no resultado de referência (`nome`). O avaliador lê a expressão
-SELECT com SQLGlot e considera equivalentes aliases distintos somente
-quando referem-se à mesma coluna de origem. Não aceita automaticamente
-colunas extras, expressões diferentes ou valores divergentes.
+Nos quatro cenários piloto, `colunas_referencia` associa a expressão física
+ao nome da coluna no gabarito. Pode identificar uma coluna ou uma agregação,
+como `AVG(medicoes.vazao_m3_s)`. O avaliador resolve aliases de tabelas e
+de saída e confere os valores e a multiplicidade das linhas. A comparação
+ignora a ordem quando `ordem_importa` é falso. Obtenha o gabarito por uma
+consulta independente na mesma versão dos dados. Somente a requisição segue
+para o modelo.
 
-O mapeamento é específico do **avaliador experimental**; não é
-fornecido ao modelo na geração de SQL. A precisão final ainda depende
-de confirmar que as referências do banco estão corretas.
+O registro identifica a última tentativa com `sql_sintaticamente_valida`
+(`null` quando a análise sintática não ocorreu), `sql_aprovada` e
+`consulta_executada`. Uma execução bem-sucedida tem `resultado` igual a
+`correto`, `divergente` ou `sem_referencia`. Uma falha técnica tem
+`etapa_falha`, contadores de tentativas e tempos das etapas alcançadas.
+O JSONL guarda esses indicadores sem o texto do pedido, do SQL, da exceção
+ou dos registros do banco. Linhas anteriores à mudança podem omitir os campos novos.
 
 ## Ampliação gradual: cenários 05 a 14
 

@@ -187,7 +187,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         )
         banco = Mock()
         banco.execute_select.return_value = [{"titulo": "Filme A"}]
-        estrutura = {"tabelas": {}, "relacionamentos": []}
+        estrutura = {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []}
         resposta = executar_requisicao(
             requisicao_v1(), estrutura, modelo, banco
         )

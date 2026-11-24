@@ -11,18 +11,20 @@ from typing import Any
 import sqlglot
 from sqlglot import exp
 
+from src.agente.projecao_sql import coluna_e_funcao, nome_de_saida
 
-def _normalizar_valor(valor: Any) -> tuple:
+
+def _normalizar_valor(valor: Any, converter_decimal: bool) -> tuple:
     """Normaliza números sem perder precisão e preserva tipos distintos."""
     if valor is None:
         return ("nulo", None)
     if isinstance(valor, bool):
         return ("booleano", valor)
     if isinstance(valor, (int, float, Decimal)):
-        return ("numero", str(Decimal(str(valor)).normalize()))
+        return ("numero", Decimal(str(valor)))
     if isinstance(valor, (date, datetime)):
         return ("texto", valor.isoformat())
-    if isinstance(valor, str):
+    if isinstance(valor, str) and converter_decimal:
         # Conectores SQL frequentemente retornam DECIMAL como Decimal;
         # o JSON esperado só permite representar esse valor como texto/número.
         try:
@@ -30,20 +32,19 @@ def _normalizar_valor(valor: Any) -> tuple:
         except InvalidOperation:
             numero = None
         if numero is not None and numero.is_finite():
-            return ("numero", str(numero.normalize()))
+            return ("numero", numero)
+    if isinstance(valor, str):
         return ("texto", valor)
     raise ValueError("Tipo de valor não suportado na comparação.")
 
 
-def _assinatura_linha(linha: dict) -> tuple:
+def _assinatura_linha(linha: dict, numericas=frozenset()) -> tuple:
     if not isinstance(linha, dict):
         raise ValueError("Cada registro esperado deve ser um objeto JSON.")
     return tuple(sorted(
-        (chave, _normalizar_valor(valor))
+        (chave, _normalizar_valor(valor, chave in numericas))
         for chave, valor in linha.items()
     ))
-
-
 
 def _normalizar_aliases(
     registros: list[dict], consulta_sql: str, colunas_referencia: dict[str, str]
@@ -74,15 +75,30 @@ def _normalizar_aliases(
     if not isinstance(arvore, exp.Select):
         return None
 
+    aliases = {}
+    tabelas = set()
+    for tabela in arvore.find_all(exp.Table):
+        referencia_tabela = tabela.alias_or_name.casefold()
+        nome = tabela.name.casefold()
+        if nome in tabelas or referencia_tabela in aliases:
+            return None
+        aliases[referencia_tabela] = nome
+        tabelas.add(nome)
     nomes_sql_para_referencia = {}
     encontrados = set()
     for projecao in arvore.expressions:
-        expressao = projecao.this if isinstance(projecao, exp.Alias) else projecao
-        if not isinstance(expressao, exp.Column) or not expressao.table:
+        assinatura = coluna_e_funcao(projecao)
+        if assinatura is None:
             return None
-        origem = f"{expressao.table}.{expressao.name}".casefold()
+        coluna, funcao = assinatura
+        tabela = aliases.get(coluna.table.casefold())
+        if tabela is None:
+            return None
+        origem = f"{tabela}.{coluna.name}".casefold()
+        if funcao:
+            origem = f"{funcao.casefold()}({origem})"
         coluna_referencia = referencia.get(origem)
-        nome_saida = projecao.alias_or_name
+        nome_saida = nome_de_saida(projecao)
         if (
             coluna_referencia is None or not nome_saida
             or nome_saida in nomes_sql_para_referencia
@@ -133,7 +149,20 @@ def avaliar_resultados(
         registros = normalizados
 
     reais = [_assinatura_linha(item) for item in registros]
-    referencia = [_assinatura_linha(item) for item in esperados]
+    # Só converte o texto da referência quando o conector devolveu números
+    # nessa coluna. Códigos textuais como "001" preservam seus zeros.
+    numericas = set()
+    outras = set()
+    for linha in registros:
+        for chave, valor in linha.items():
+            if valor is None:
+                continue
+            if isinstance(valor, (int, float, Decimal)) and not isinstance(valor, bool):
+                numericas.add(chave)
+            else:
+                outras.add(chave)
+    numericas.difference_update(outras)
+    referencia = [_assinatura_linha(item, numericas) for item in esperados]
     correto = (
         reais == referencia if ordem_importa
         else Counter(reais) == Counter(referencia)

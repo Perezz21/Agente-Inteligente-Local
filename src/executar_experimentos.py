@@ -100,10 +100,13 @@ def executar_cenarios(
         for numero in range(1, repeticoes + 1):
             print(f"\nCenário {cenario['id']} — repetição {numero}/{repeticoes}")
             inicio = perf_counter()
+            progresso = {"etapa": "entrada", "sql_sintaticamente_valida": None,
+                         "sql_aprovada": False, "consulta_executada": False}
             try:
                 resposta = executar_requisicao(
-                    cenario["requisicao"], estrutura, modelo, banco
+                    cenario["requisicao"], estrutura, modelo, banco, progresso=progresso
                 )
+                progresso["etapa"] = "avaliacao"
                 esperado = cenario.get("resultado_esperado")
                 avaliacao = (
                     avaliar_resultados(
@@ -114,6 +117,7 @@ def executar_cenarios(
                     )
                     if esperado is not None else None
                 )
+                progresso["etapa"] = "registro_metricas"
                 registrar_execucao(
                     resposta, modelo.model, cenario["id"], destino,
                     repeticao=numero, avaliacao=avaliacao,
@@ -132,7 +136,19 @@ def executar_cenarios(
             except Exception as exc:
                 # O texto da exceção pode conter valores de filtros, SQL ou dados.
                 # Registrar somente a categoria da falha, não sua mensagem.
+                total = perf_counter() - inicio
+                etapa = progresso.pop("etapa")
+                campos_tempo = {"interpretacao": "tempo_interpretacao_segundos",
+                                "geracao_sql": "tempo_geracao_sql_segundos",
+                                "validacao_sql": "tempo_geracao_sql_segundos",
+                                "execucao_mysql": "tempo_execucao_mysql_segundos"}
+                campo = campos_tempo.get(etapa)
+                if campo is not None:
+                    anteriores = sum(progresso.get(k, 0) for k in set(campos_tempo.values()))
+                    progresso[campo] = max(0.0, total - anteriores)
                 falha = {
+                    **progresso,
+                    "etapa_falha": etapa,
                     "data_hora_utc": datetime.now(timezone.utc).isoformat(),
                     "modelo": modelo.model,
                     "cenario": cenario["id"],
@@ -140,13 +156,13 @@ def executar_cenarios(
                     "rodada_id": rodada_id,
                     "status": "falha",
                     "tipo_erro": type(exc).__name__,
-                    "tempo_total_segundos": perf_counter() - inicio,
+                    "tempo_total_segundos": total,
                 }
                 destino.parent.mkdir(parents=True, exist_ok=True)
                 with destino.open("a", encoding="utf-8") as arquivo:
                     arquivo.write(json.dumps(falha, ensure_ascii=False) + "\n")
                 resumo["falhas"] += 1
-                print(f"Resultado: falha ({type(exc).__name__})")
+                print(f"Resultado: falha em {etapa} ({type(exc).__name__})")
 
     return resumo
 

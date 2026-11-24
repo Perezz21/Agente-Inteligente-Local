@@ -3,12 +3,15 @@
 import json
 import os
 import re
+from collections import Counter
 from typing import Any
 
 import sqlglot
 from sqlglot import exp
 
-from src.agente.ollama_client import OllamaModelClient
+from src.agente.ollama_client import OllamaModelClient, OllamaModelError
+from src.agente.projecao_sql import coluna_e_funcao, nome_de_saida
+from src.agente.relacionamentos import chaves_do_catalogo, par_colunas
 from src.agente.esquema_geracao_sql import ESQUEMA_GERACAO_SQL
 
 
@@ -88,7 +91,13 @@ def _remover_where_true_redundante(
 
 
 class SQLGenerationError(RuntimeError):
-    """Erro durante a geração ou validação da consulta SQL."""
+    """Falha com indicadores da última tentativa, sem dados nos indicadores."""
+
+    def __init__(self, mensagem, *, etapa="geracao_sql", sintaxe=None, tentativas_sql=None):
+        super().__init__(mensagem)
+        self.etapa = etapa
+        self.sintaxe = sintaxe
+        self.tentativas_sql = tentativas_sql
 
 
 class SQLGenerator:
@@ -117,11 +126,14 @@ class SQLGenerator:
 
         for tentativa in range(1, max_tentativas + 1):
 
-            resultado = self.modelo.generate(
-                prompt=prompt,
-                max_tokens=700,
-                json_schema=ESQUEMA_GERACAO_SQL,
-            )
+            try:
+                resultado = self.modelo.generate(
+                    prompt=prompt, max_tokens=700, json_schema=ESQUEMA_GERACAO_SQL
+                )
+            except OllamaModelError as erro:
+                raise SQLGenerationError("Falha ao gerar SQL no modelo local.",
+                                         tentativas_sql=tentativa) from erro
+            etapa, sintaxe = "geracao_sql", None
 
             if os.getenv("AGENTE_DEPURAR_SQL") == "1":
                 print(f"\nRESPOSTA BRUTA DO MODELO - TENTATIVA {tentativa}")
@@ -149,6 +161,7 @@ class SQLGenerator:
                     consulta, parametros, interpretacao
                 )
 
+                etapa = "validacao_sql"
                 self._validate_query(
                     consulta,
                     parametros,
@@ -173,6 +186,7 @@ class SQLGenerator:
                 )
 
             except SQLGenerationError as erro:
+                sintaxe = erro.sintaxe
                 ultimo_erro = str(erro)
 
             if tentativa == max_tentativas:
@@ -199,13 +213,16 @@ class SQLGenerator:
 
         raise SQLGenerationError(
             f"A consulta não foi aprovada após {max_tentativas} "
-            f"tentativas. Último erro: {ultimo_erro}"
+            f"tentativas. Último erro: {ultimo_erro}",
+            etapa=etapa, sintaxe=sintaxe, tentativas_sql=max_tentativas,
         )
 
     @staticmethod
     def _parse_model_response(conteudo: str) -> dict[str, Any]:
         """Interpreta o JSON retornado pelo modelo."""
 
+        if not isinstance(conteudo, str):
+            raise SQLGenerationError("Conteúdo do modelo em formato inesperado.")
         conteudo = conteudo.strip()
 
         # Remove cercas Markdown, se o modelo as utilizar.
@@ -226,6 +243,8 @@ class SQLGenerator:
                 "A resposta do modelo não é um objeto JSON."
             )
 
+        if set(resposta) != {"consulta_sql", "parametros"}:
+            raise SQLGenerationError("Campos inesperados ou ausentes na resposta SQL.")
         return resposta
 
     @staticmethod
@@ -319,7 +338,7 @@ ESTRUTURA DO BANCO:
                 )
 
         # Substitui os marcadores para permitir a análise sintática.
-        consulta_analise = consulta.replace("%s", "NULL")
+        consulta_analise = consulta.replace("%s", "?")
 
         try:
             comandos = sqlglot.parse(
@@ -328,7 +347,7 @@ ESTRUTURA DO BANCO:
             )
         except Exception as exc:
             raise SQLGenerationError(
-                "Não foi possível analisar a sintaxe da consulta SQL."
+                "Não foi possível analisar a sintaxe da consulta SQL.", sintaxe=False
             ) from exc
 
         if len(comandos) != 1 or comandos[0] is None:
@@ -336,12 +355,29 @@ ESTRUTURA DO BANCO:
                 "A consulta deve conter somente uma instrução SQL."
             )
 
-        arvore = comandos[0]
+        try:
+            SQLGenerator._validar_select(comandos[0], parametros, estrutura, interpretacao)
+        except SQLGenerationError as erro:
+            erro.sintaxe = True
+            erro.etapa = "validacao_sql"
+            raise
+
+    @staticmethod
+    def _validar_select(arvore, parametros, estrutura, interpretacao) -> None:
 
         if not isinstance(arvore, exp.Select):
             raise SQLGenerationError(
                 "Somente consultas SELECT são permitidas."
             )
+
+        clausulas = {"expressions", "from_", "from", "joins", "where", "group", "order"}
+        if any(valor and chave not in clausulas for chave, valor in arvore.args.items()):
+            raise SQLGenerationError("Cláusula SELECT fora das operações solicitadas.")
+        if any(isinstance(no, exp.Select) and no is not arvore for no in arvore.walk()):
+            raise SQLGenerationError("Subconsultas não são suportadas.")
+        ordem = arvore.args.get("order")
+        if ordem and any(not isinstance(item.this, exp.Column) for item in ordem.expressions):
+            raise SQLGenerationError("Ordenação deve utilizar colunas qualificadas.")
 
         # Recupera as tabelas disponíveis no banco.
         tabelas_disponiveis = estrutura["tabelas"]
@@ -363,9 +399,13 @@ ESTRUTURA DO BANCO:
         # Identifica as tabelas utilizadas e seus aliases.
         tabelas_utilizadas = set()
         aliases = {}
+        referencias_sql = set()
 
         for tabela in arvore.find_all(exp.Table):
 
+            if (tabela.catalog or (tabela.db and tabela.db != estrutura.get("banco"))
+                    or not isinstance(tabela.this, exp.Identifier)):
+                raise SQLGenerationError("A tabela deve pertencer ao catálogo local.")
             nome_informado = tabela.name
             nome_real = esquema_tabelas.get(
                 nome_informado.casefold()
@@ -376,25 +416,15 @@ ESTRUTURA DO BANCO:
                     f"Tabela não existente no esquema: {nome_informado}."
                 )
 
+            referencia = tabela.alias_or_name.casefold()
+            if nome_real in tabelas_utilizadas or referencia in aliases or (
+                referencia in esquema_tabelas and esquema_tabelas[referencia] != nome_real
+            ):
+                raise SQLGenerationError("Repetição de tabela ou alias ambíguo no JOIN.")
+            referencias_sql.add(referencia)
             tabelas_utilizadas.add(nome_real)
-
-            # Permite referência pelo próprio nome da tabela.
+            aliases[referencia] = nome_real
             aliases[nome_real.casefold()] = nome_real
-
-            # Registra o nome de referência informado pelo SQLGlot.
-            nome_referencia = tabela.alias_or_name
-
-            if nome_referencia:
-                aliases[nome_referencia.casefold()] = nome_real
-
-            # Registra explicitamente o alias, quando existir.
-            alias_expr = tabela.args.get("alias")
-
-            if isinstance(alias_expr, exp.TableAlias):
-                alias_nome = alias_expr.this.name
-
-                if alias_nome:
-                    aliases[alias_nome.casefold()] = nome_real
 
         if not tabelas_utilizadas:
             raise SQLGenerationError(
@@ -404,6 +434,8 @@ ESTRUTURA DO BANCO:
         # Verifica se todas as colunas pertencem ao esquema.
         for coluna in arvore.find_all(exp.Column):
 
+            if coluna.catalog or (coluna.db and coluna.db != estrutura.get("banco")):
+                raise SQLGenerationError("Coluna fora do esquema local.")
             if coluna.name == "*":
                 continue
 
@@ -418,7 +450,7 @@ ESTRUTURA DO BANCO:
                 tabela_referenciada.casefold()
             )
 
-            if tabela_real is None:
+            if tabela_referenciada.casefold() not in referencias_sql or tabela_real is None:
                 raise SQLGenerationError(
                     f"Tabela não identificada para a coluna: "
                     f"{tabela_referenciada}. "
@@ -435,32 +467,10 @@ ESTRUTURA DO BANCO:
         def extrair_assinatura(expressao: exp.Expression) -> tuple:
             """Identifica tabela, coluna e função de agregação."""
 
-            if isinstance(expressao, exp.Alias):
-                expressao = expressao.this
-
-            agregacao = None
-
-            if isinstance(expressao, exp.AggFunc):
-                agregacao = expressao.key.upper()
-
-                colunas = list(expressao.find_all(exp.Column))
-
-                if len(colunas) != 1:
-                    raise SQLGenerationError(
-                        "Não foi possível identificar o campo "
-                        "da expressão de agregação."
-                    )
-
-                coluna = colunas[0]
-
-            elif isinstance(expressao, exp.Column):
-                coluna = expressao
-
-            else:
-                raise SQLGenerationError(
-                    "A consulta contém uma expressão não reconhecida "
-                    "na lista de campos retornados."
-                )
+            assinatura = coluna_e_funcao(expressao)
+            if assinatura is None:
+                raise SQLGenerationError("Expressão ou função de agregação não suportada na projeção.")
+            coluna, agregacao = assinatura
 
             tabela = coluna.table
             nome_coluna = coluna.name
@@ -478,7 +488,7 @@ ESTRUTURA DO BANCO:
                 agregacao,
             )
 
-        campos_esperados = set()
+        campos_esperados = Counter()
 
         for campo in interpretacao.get("campos_solicitados", []):
 
@@ -490,7 +500,7 @@ ESTRUTURA DO BANCO:
 
                 assinatura = extrair_assinatura(expressao)
 
-                campos_esperados.add(assinatura)
+                campos_esperados[assinatura] += 1
 
             except SQLGenerationError:
                 raise
@@ -500,10 +510,10 @@ ESTRUTURA DO BANCO:
                     f"Campo solicitado inválido na interpretação: {campo}."
                 ) from exc
 
-        campos_encontrados = {
+        campos_encontrados = Counter(
             extrair_assinatura(projecao)
             for projecao in arvore.expressions
-        }
+        )
 
         campos_faltantes = campos_esperados - campos_encontrados
         campos_extras = campos_encontrados - campos_esperados
@@ -515,16 +525,20 @@ ESTRUTURA DO BANCO:
             if campos_faltantes:
                 detalhes.append(
                     "Campos solicitados ausentes na consulta: "
-                    f"{sorted(campos_faltantes)}"
+                    f"{sorted(campos_faltantes.elements(), key=str)}"
                 )
 
             if campos_extras:
                 detalhes.append(
                     "Campos não solicitados encontrados na consulta: "
-                    f"{sorted(campos_extras)}"
+                    f"{sorted(campos_extras.elements(), key=str)}"
                 )
 
             raise SQLGenerationError("; ".join(detalhes))
+
+        nomes_saida = [nome_de_saida(projecao) for projecao in arvore.expressions]
+        if len(nomes_saida) != len(set(nomes_saida)):
+            raise SQLGenerationError("Colunas de saída com o mesmo nome. Use aliases AS distintos.")
 
         # Valida se os filtros da consulta correspondem à interpretação.
 
@@ -578,15 +592,15 @@ ESTRUTURA DO BANCO:
             )
 
             if ano_igual:
-                colunas = list(esquerda.find_all(exp.Column))
-
-                if len(colunas) != 1:
+                coluna = esquerda.this
+                if isinstance(coluna, exp.TsOrDsToDate):
+                    coluna = coluna.this
+                if not isinstance(coluna, exp.Column):
                     raise SQLGenerationError(
                         "Não foi possível identificar a coluna "
                         "utilizada no filtro por ano."
                     )
 
-                coluna = colunas[0]
                 operador = "ANO_IGUAL"
 
             elif isinstance(esquerda, exp.Column):
@@ -605,7 +619,7 @@ ESTRUTURA DO BANCO:
                     f"Tabela não identificada no filtro: {coluna.table}."
                 )
 
-            if not isinstance(direita, exp.Null):
+            if not isinstance(direita, exp.Placeholder) or direita.this is not None:
                 raise SQLGenerationError(
                     "Os valores dos filtros devem utilizar "
                     "parâmetros %s, não valores inseridos diretamente."
@@ -622,7 +636,7 @@ ESTRUTURA DO BANCO:
                 filtro["operador"].upper()
                 if filtro["operador"] == "ANO_IGUAL"
                 else filtro["operador"],
-                filtro["valor"],
+                type(filtro["valor"]).__name__, filtro["valor"],
             )
             for filtro in interpretacao.get("filtros", [])
         ]
@@ -649,7 +663,7 @@ ESTRUTURA DO BANCO:
                     (
                         campo,
                         operador,
-                        parametros[indice],
+                        type(parametros[indice]).__name__, parametros[indice],
                     )
                 )
 
@@ -671,13 +685,13 @@ ESTRUTURA DO BANCO:
             if filtros_pendentes:
                 detalhes.append(
                     f"Filtros solicitados ausentes ou incorretos: "
-                    f"{filtros_pendentes}"
+                    f"{[f[:2] for f in filtros_pendentes]}"
                 )
 
             if filtros_extras:
                 detalhes.append(
                     f"Filtros não solicitados encontrados: "
-                    f"{filtros_extras}"
+                    f"{[f[:2] for f in filtros_extras]}"
                 )
 
             raise SQLGenerationError("; ".join(detalhes))
@@ -745,9 +759,6 @@ ESTRUTURA DO BANCO:
                 )
 
         # Verifica se os JOINs correspondem aos relacionamentos esperados.
-        def normalizar_relacionamento(origem: str, destino: str) -> frozenset:
-            return frozenset((origem.casefold(), destino.casefold()))
-
         def extrair_relacionamentos(lista: Any) -> set[frozenset]:
             if not isinstance(lista, list):
                 raise SQLGenerationError(
@@ -778,7 +789,7 @@ ESTRUTURA DO BANCO:
                     )
 
                 relacionamentos.add(
-                    normalizar_relacionamento(origem, destino)
+                    par_colunas(origem, destino)
                 )
 
             return relacionamentos
@@ -795,14 +806,7 @@ ESTRUTURA DO BANCO:
                 "A interpretação contém relacionamentos inexistentes no banco."
             )
 
-        restricoes = {}
-        for relacao in estrutura.get("relacionamentos", []):
-            origem, destino = relacao["origem"], relacao["destino"]
-            par = normalizar_relacionamento(origem, destino)
-            # Catálogos anteriores registravam apenas pares individuais.
-            chave = (origem.split(".")[0], relacao.get("restricao", par))
-            restricoes.setdefault(chave, set()).add(par)
-
+        restricoes = chaves_do_catalogo(estrutura)
         encontrados = set()
 
         def analisar_on(condicao: exp.Expression, pares: set) -> None:
@@ -844,12 +848,16 @@ ESTRUTURA DO BANCO:
                 )
 
             pares.add(
-                normalizar_relacionamento(
+                par_colunas(
                     f"{tabela_esquerda}.{esquerda.name}",
                     f"{tabela_direita}.{direita.name}",
                 )
             )
 
+        origem_from = arvore.args.get("from_") or arvore.args.get("from")
+        if not origem_from or not isinstance(origem_from.this, exp.Table):
+            raise SQLGenerationError("FROM deve identificar uma tabela do esquema.")
+        ligadas = {origem_from.this.name.casefold()}
         for join in arvore.find_all(exp.Join):
             condicao_on = join.args.get("on")
 
@@ -861,11 +869,17 @@ ESTRUTURA DO BANCO:
             pares = set()
             analisar_on(condicao_on, pares)
             cobertos = set()
-            for componentes in restricoes.values():
+            for componentes in restricoes:
                 if componentes <= pares:
                     cobertos.update(componentes)
             if (pares & permitidos) - cobertos:
                 raise SQLGenerationError("JOIN com chave estrangeira composta incompleta.")
+            nova = join.this.name.casefold()
+            for par in pares:
+                tabelas_par = {col.split(".")[0] for col in par}
+                if nova not in tabelas_par or not ligadas.intersection(tabelas_par):
+                    raise SQLGenerationError("O ON deve ligar a nova tabela a uma tabela anterior.")
+            ligadas.add(nova)
             encontrados.update(pares)
 
         faltantes = esperados - encontrados
@@ -877,6 +891,10 @@ ESTRUTURA DO BANCO:
                 f"Ausentes: {sorted(map(sorted, faltantes))}. "
                 f"Adicionais: {sorted(map(sorted, extras))}."
             )
+
+        planejadas = interpretacao.get("tabelas_identificadas")
+        if planejadas and {t.casefold() for t in planejadas} != ligadas:
+            raise SQLGenerationError("Tabelas consultadas divergem do plano de relacionamentos.")
 
         # Validação semântica completa do agrupamento.
         # Sem agrupamento explícito, as colunas não agregadas da
@@ -904,6 +922,8 @@ ESTRUTURA DO BANCO:
         colunas_agrupamento_sql = []
 
         if agrupamento_sql is not None:
+            if any(v for k, v in agrupamento_sql.args.items() if k != "expressions"):
+                raise SQLGenerationError("GROUP BY deve conter apenas as colunas solicitadas, sem subtotais.")
             colunas_agrupamento_sql = [
                 assinatura_coluna(item)
                 for item in agrupamento_sql.expressions

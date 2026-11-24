@@ -48,7 +48,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         resultado = executar_requisicao(
             {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
-            {"tabelas": {}, "relacionamentos": []},
+            {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
             modelo, banco
         )
         self.assertEqual(resultado["metricas"]["tentativas_interpretacao"], 2)
@@ -69,7 +69,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
             executar_requisicao(
                 {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
-                {"tabelas": {}, "relacionamentos": []},
+                {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
                 modelo, banco,
             )
         self.assertEqual(modelo.generate.call_count, 2)
@@ -84,7 +84,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
             executar_requisicao(
                 {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
-                {"tabelas": {}, "relacionamentos": []},
+                {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
                 modelo, Mock(),
             )
 

@@ -1,117 +1,173 @@
-"""Valida mapeamentos produzidos pelo modelo contra o esquema descoberto."""
-
+"""Resolve referências no catálogo descoberto e valida a interpretação do pedido."""
 import re
-from typing import Any
+from collections import defaultdict
 
+from src.agente.relacionamentos import menciona, palavras, planejar_relacoes
 
-_CAMPO = re.compile(
-    r"^(?:(?:AVG|SUM|MIN|MAX|COUNT)\()?([A-Za-z_]\w*\.[A-Za-z_]\w*)\)?$",
-    re.IGNORECASE,
+_NOME = r"[A-Za-z_]\w*"
+_REFERENCIA = re.compile(rf"{_NOME}\.{_NOME}")
+_PROJECAO = re.compile(
+    rf"(?:(?P<funcao>AVG|SUM|MIN|MAX|COUNT)\(\s*)?"
+    rf"(?P<coluna>(?:{_NOME}\.)?{_NOME})(?(funcao)\s*\))", re.IGNORECASE,
 )
+_TERMOS_ID = {"id", "identificador", "identificacao", "chave", "numero", "codigo",
+              "identifier", "key", "number", "code"}
 
 
-def validar_mapeamento(
-    candidato: dict[str, Any], requisicao: dict, estrutura: dict
-) -> str | None:
-    """Retorna uma mensagem de erro ou None, sem presumir nomes de tabelas."""
+def _validar_papel_identificador(pedido, tabela, coluna, dados_tabela):
+    termos = set(palavras(pedido)) - set(palavras(tabela))
+    if coluna == "id" and not termos.intersection(_TERMOS_ID):
+        raise ValueError(f"O pedido {pedido!r} não identifica a coluna {tabela}.id.")
+    rotulos = termos & {"numero", "codigo", "number", "code"}
+    if not rotulos:
+        return
+    candidatas = [c["nome"] for c in dados_tabela["colunas"] if rotulos.intersection(palavras(c["nome"]))]
+    descritas = [c for c in candidatas if menciona(pedido, c)]
+    opcoes = descritas or candidatas
+    if opcoes and (len(opcoes) != 1 or coluna != opcoes[0].casefold()):
+        raise ValueError(f"Especifique a coluna para {pedido!r}. Opções do catálogo: "
+                         + ", ".join(f"{tabela}.{c}" for c in opcoes))
+
+
+def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> dict:
+    """Devolve uma cópia canônica ou um diagnóstico para a próxima tentativa."""
     tabelas = estrutura.get("tabelas", {})
     if not tabelas:
-        return None  # Compatibilidade com testes unitários sem esquema real.
+        raise ValueError("Banco sem tabelas visíveis para mapear a requisição.")
+    nomes = {t.casefold() for t in tabelas}
+    colunas = defaultdict(list)
+    for tabela, dados in tabelas.items():
+        for coluna in dados["colunas"]:
+            colunas[coluna["nome"].casefold()].append(f"{tabela}.{coluna['nome']}")
 
-    disponiveis = {
-        f"{tabela}.{coluna['nome']}".casefold()
-        for tabela, dados in tabelas.items()
-        for coluna in dados.get("colunas", [])
-    }
-    nomes = {nome.casefold() for nome in tabelas}
+    entidade = requisicao["entidade"]
+    tabelas_entidade = {t for t in nomes if palavras(entidade) == palavras(t)}
+
+    if not tabelas_entidade:
+        tabelas_entidade = {t for t in nomes if palavras(entidade) == palavras(t + "s")
+                            or palavras(entidade + "s") == palavras(t)}
+    if len(tabelas_entidade) != 1:
+        tabelas_entidade.clear()
+
+    def resolver(campo: str, pedido: str, *, contagem=False) -> str:
+        if not isinstance(campo, str):
+            raise ValueError("A coluna interpretada deve ser texto.")
+        abreviado = campo.rsplit(".", 1)[-1].casefold()
+        opcoes = colunas.get(abreviado, [])
+        chave = pedido.strip().casefold()
+        if _REFERENCIA.fullmatch(chave):
+            fisicas = colunas.get(chave.split(".")[1], [])
+            if not any(c.casefold() == chave for c in fisicas):
+                raise ValueError(f"Referência física inexistente no catálogo: {pedido!r}.")
+            if campo.casefold() not in (chave, chave.split(".")[1]):
+                raise ValueError(f"Para a chave explícita {pedido!r}, use a coluna {chave}.")
+            opcoes = [c for c in opcoes if c.casefold() == chave]
+        elif chave in colunas and chave != abreviado:
+            raise ValueError(f"Coluna divergente para o campo solicitado {pedido!r}.")
+        else:
+            tabelas_descritas = {t for t in nomes if menciona(pedido, t)}
+            if not tabelas_descritas:
+                tabelas_descritas = {
+                    t for t in nomes if menciona(pedido, t + "s")
+                    or (len(t) > 1 and t.endswith("s") and menciona(pedido, t[:-1]))
+                }
+            locais = [c for c in opcoes if c.split(".")[0].casefold() in tabelas_descritas]
+            if locais:
+                opcoes = locais
+            elif tabelas_descritas and "." not in campo and not (
+                set(palavras(abreviado)) & set(palavras(pedido))
+            ):
+                raise ValueError(f"A coluna abreviada {campo!r} não pertence à tabela "
+                                 f"indicada em {pedido!r}. Verifique a referência no catálogo.")
+            elif len(opcoes) > 1:
+                contextual = [c for c in opcoes if c.split(".")[0].casefold() in tabelas_entidade]
+                if chave != abreviado or len(contextual) != 1:
+                    raise ValueError(f"Campo ambíguo para {pedido!r}. Opções do catálogo: "
+                                     + ", ".join(sorted(opcoes)))
+                opcoes = contextual
+        if "." in campo:
+            opcoes = [c for c in opcoes if c.casefold() == campo.casefold()]
+        if len(opcoes) != 1:
+            alternativas = ", ".join(sorted(opcoes)) or "nenhuma coluna compatível"
+            raise ValueError(f"Confira {pedido!r} e a coluna {campo!r}. Opções: {alternativas}.")
+        resolvida = opcoes[0]
+        if contagem:
+            return resolvida
+        tabela = resolvida.split(".")[0]
+        if not _REFERENCIA.fullmatch(chave) and chave != abreviado:
+            _validar_papel_identificador(pedido, tabela, abreviado, tabelas[tabela])
+        if not _REFERENCIA.fullmatch(chave) and not menciona(pedido, abreviado):
+            alternativas = [f"{tabela}.{c['nome']}" for c in tabelas[tabela]["colunas"]
+                            if c["nome"].casefold() != abreviado and menciona(pedido, c["nome"])]
+            if alternativas:
+                raise ValueError(f"Confira a coluna indicada por {pedido!r}: {', '.join(alternativas)}.")
+        return resolvida
+
     selecionados = candidato["campos_solicitados"]
     if not selecionados:
-        return "Nenhuma coluna foi identificada para a requisição."
-
-    colunas_selecionadas = []
-    for campo in selecionados:
-        if not isinstance(campo, str):
-            return "Campo solicitado deve ser texto no formato tabela.coluna."
-        correspondencia = _CAMPO.fullmatch(campo.replace(" ", ""))
-        if not correspondencia or correspondencia.group(1).casefold() not in disponiveis:
-            return f"Campo solicitado inexistente ou não qualificado: {campo!r}."
-
-        colunas_selecionadas.append(correspondencia.group(1))
-
-    for tabela in candidato["tabelas_identificadas"]:
-        if not isinstance(tabela, str) or tabela.casefold() not in nomes:
-            return f"Tabela não existente no esquema: {tabela!r}."
-
-    if not candidato["tabelas_identificadas"]:
-        return "Nenhuma tabela identificada."
-
-    # Um filtro não pedido não deve ser introduzido pelo modelo.
-    if not requisicao.get("filtros") and candidato["filtros"]:
-        return "O modelo criou filtros que não foram solicitados."
+        raise ValueError("Nenhuma coluna foi identificada para a requisição.")
+    if not candidato["tabelas_identificadas"] or any(
+        not isinstance(t, str) or t.casefold() not in nomes for t in candidato["tabelas_identificadas"]
+    ):
+        raise ValueError("Tabela não identificada ou inexistente no esquema.")
+    projecoes = []
+    agregacoes = {(a["funcao"].upper(), a["campo"].casefold())
+                  for a in requisicao.get("agregacoes", [])}
+    necessarias = set(tabelas_entidade)
+    for pedido, campo in zip(requisicao["campos"], selecionados):
+        expr = _PROJECAO.fullmatch(campo) if isinstance(campo, str) else None
+        if not expr or expr["coluna"].split(".")[-1].casefold() not in colunas:
+            raise ValueError(f"Campo solicitado inexistente ou inválido: {campo!r}.")
+        funcao = (expr["funcao"] or "").upper()
+        referencia = pedido
+        if funcao and not _REFERENCIA.fullmatch(pedido) and pedido.casefold() not in colunas:
+            # O contrato já pode identificar a coluna física para a expressão natural.
+            terminal = expr["coluna"].rsplit(".", 1)[-1].casefold()
+            declaradas = [c for f, c in agregacoes if f == funcao and c.split(".")[-1] == terminal]
+            if len(declaradas) == 1:
+                referencia = declaradas[0]
+        coluna = resolver(expr["coluna"], referencia, contagem=funcao == "COUNT")
+        if expr["funcao"] and (_REFERENCIA.fullmatch(pedido) or pedido.casefold() in colunas):
+            if (expr["funcao"].upper(), coluna.casefold()) not in agregacoes:
+                raise ValueError(f"Agregação não solicitada para a coluna explícita {pedido!r}.")
+        necessarias.add(coluna.split(".")[0].casefold())
+        projecoes.append(f"{expr['funcao'].upper()}({coluna})" if expr["funcao"] else coluna)
+    if len(selecionados) != len(requisicao["campos"]):
+        raise ValueError("Quantidade de campos interpretados difere da requisição.")
 
     pedidos = requisicao.get("filtros", {})
     pendentes = set(pedidos)
-
-    def corresponde_ao_identificador(pedido: str, coluna: str) -> bool:
-        # Um identificador físico fornecido pelo usuário tem precedência.
-        nome = pedido.strip().casefold()
-        if re.fullmatch(r"[\w]+\.[\w]+", nome):
-            return coluna.casefold() == nome
-        if nome in nomes_colunas:
-            return coluna.rsplit(".", 1)[-1].casefold() == nome
-        return True  # Termo conceitual: a resolução semântica cabe ao modelo.
-
-    nomes_colunas = {nome.rsplit(".", 1)[-1] for nome in disponiveis}
+    filtros = []
     for filtro in candidato["filtros"]:
+        if not pedidos:
+            raise ValueError("O modelo criou filtros que não foram solicitados.")
         if not isinstance(filtro, dict):
-            return "Filtro com estrutura inválida."
-        campo = filtro.get("campo")
-        operador = filtro.get("operador")
-        if not isinstance(campo, str) or campo.casefold() not in disponiveis:
-            return f"Coluna de filtro inexistente: {campo!r}."
-        if operador not in ("=", "!=", ">", ">=", "<", "<=", "ANO_IGUAL"):
-            return "Operador de filtro não suportado."
-        if "valor" not in filtro:
-            return "Filtro sem valor."
-
-        origem = filtro.get("chave_pedida")
-        if not isinstance(origem, str) or origem not in pendentes:
-            return "Filtro sem correspondência única com uma chave da requisição."
-        esperado = pedidos[origem]
-        recebido = filtro["valor"]
-        if type(recebido) is not type(esperado) or recebido != esperado:
-            return f"Valor ou tipo alterado no filtro {origem!r}."
-        if not corresponde_ao_identificador(origem, campo):
-            return f"Coluna divergente para o filtro {origem!r}."
-        pendentes.remove(origem)
+            raise ValueError("Filtro com estrutura inválida.")
+        chave = filtro.get("chave_pedida")
+        if not isinstance(chave, str) or chave not in pendentes:
+            raise ValueError("Filtro sem correspondência única com uma chave da requisição.")
+        if filtro.get("operador") not in ("=", "!=", ">", ">=", "<", "<=", "ANO_IGUAL"):
+            raise ValueError("Operador de filtro não suportado.")
+        valor = filtro.get("valor")
+        if type(valor) is not type(pedidos[chave]) or valor != pedidos[chave]:
+            raise ValueError(f"Valor ou tipo alterado no filtro {chave!r}.")
+        coluna = resolver(filtro.get("campo"), chave)
+        filtros.append({**filtro, "campo": coluna})
+        necessarias.add(coluna.split(".")[0].casefold())
+        pendentes.remove(chave)
 
     if pendentes:
-        return f"Filtros solicitados ausentes: {sorted(pendentes)}."
+        raise ValueError(f"Filtros solicitados ausentes: {sorted(pendentes)}.")
+    usadas, relacoes = planejar_relacoes(necessarias, candidato["relacionamentos_necessarios"],
+                                          estrutura, requisicao)
+    return {**candidato, "campos_solicitados": projecoes, "filtros": filtros,
+            "tabelas_identificadas": usadas, "relacionamentos_necessarios": relacoes}
 
-    conhecidos = {
-        frozenset((r["origem"].casefold(), r["destino"].casefold()))
-        for r in estrutura.get("relacionamentos", [])
-    }
-    for relacao in candidato["relacionamentos_necessarios"]:
-        if not isinstance(relacao, dict):
-            return "Relacionamento com estrutura inválida."
-        origem, destino = relacao.get("origem"), relacao.get("destino")
-        if not isinstance(origem, str) or not isinstance(destino, str):
-            return "Relacionamento sem origem ou destino."
-        if frozenset((origem.casefold(), destino.casefold())) not in conhecidos:
-            return "Relacionamento inexistente no esquema."
 
-    # Evita interpretações que copiam todas as colunas do catálogo.
-    campos_pedidos = requisicao.get("campos")
-    if isinstance(campos_pedidos, list) and campos_pedidos:
-        if len(selecionados) != len(campos_pedidos):
-            return (
-                "Quantidade de campos interpretados difere da requisição: "
-                f"{len(selecionados)} em vez de {len(campos_pedidos)}."
-            )
-
-        for pedido, coluna in zip(campos_pedidos, colunas_selecionadas):
-            if not corresponde_ao_identificador(pedido, coluna):
-                return f"Coluna divergente para o campo solicitado {pedido!r}."
-
+def validar_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> str | None:
+    """Compatibilidade para chamadas que só pedem a mensagem de validação."""
+    try:
+        resolver_mapeamento(candidato, requisicao, estrutura)
+    except ValueError as exc:
+        return str(exc)
     return None
