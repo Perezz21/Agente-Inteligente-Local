@@ -106,11 +106,18 @@ Execute:
 python -m src.main
 ```
 
-Na janela, cole o JSON. **Validar JSON** confere o contrato v1.0 e formata o
-texto. **Executar consulta** inicia o processamento. Na janela de resultados,
-**Copiar SQL** conserva os marcadores de parâmetros e **Nova consulta** reabre
-o editor com o pedido anterior. Para colar o JSON no terminal, execute
-`python -m src.main --cli`. Com `--arquivo`, o processamento permanece no terminal.
+Na janela, preencha o modelo de requisição ou importe um JSON com **Ctrl+O**.
+**Validar JSON** confere o contrato v1.0. **Ctrl+Enter** executa a consulta.
+Durante a execução, a tela identifica a etapa em andamento e mostra o tempo decorrido.
+
+Na janela de resultados, **Voltar à requisição** recupera o último pedido para edição.
+**Nova consulta** abre o modelo inicial. A pesquisa, a ordenação e a paginação
+operam sobre os registros já recuperados. **Exportar resultados** salva todos os
+registros em CSV ou JSON, inclusive quando há um filtro visual ativo.
+
+A interface usa Tkinter e ttk com o tema do projeto. Para colar o JSON no
+terminal, execute `python -m src.main --cli`. Com `--arquivo`, o processamento
+também permanece no terminal. [Ver capturas das janelas](docs/interface/README.md)
 
 O nome do modelo é configurável. Isso permitirá testar diferentes modelos sem alterar o código do agente.
 

@@ -91,6 +91,7 @@ class JanelasTk(unittest.TestCase):
         self.servico = Mock(return_value=(RESULTADO, "Métricas registradas"))
         self.app = janelas.Aplicacao(self.raiz, self.servico)
         self.raiz.update()
+        self.app.limpar()
 
     def widgets(self, pai, tipo):
         achados = []
@@ -116,16 +117,15 @@ class JanelasTk(unittest.TestCase):
         for invalido in ("{", '{"entidade":"legado"}'):
             self.app.limpar()
             self.app.editor.insert("1.0", invalido)
-            with patch.object(self.ui.messagebox, "showerror") as erro:
-                self.app.executar()
-                erro.assert_called_once()
+            self.app.executar()
+            self.assertIsNotNone(self.app.erro)
             self.servico.assert_not_called()
         self.app.limpar()
         self.app.editor.insert("1.0", json.dumps(PEDIDO))
         self.assertEqual(self.app.validar(), PEDIDO)
         self.raiz.update()
         self.assertIn('\n  "versao"', self.app.editor.get("1.0", "end-1c"))
-        margem = self.widgets(self.raiz, self.ui.tk.Canvas)[0]
+        margem = self.widgets(self.app.editor.master, self.ui.tk.Canvas)[0]
         self.assertGreater(len(margem.find_all()), 1)
         self.app.limpar()
         self.assertEqual(self.app.editor.get("1.0", "end-1c"), "")
@@ -159,17 +159,16 @@ class JanelasTk(unittest.TestCase):
         botoes = {b.cget("text"): b for b in self.widgets(janela, self.ui.ttk.Button)}
         botoes["Copiar SQL"].invoke()
         self.assertEqual(janela.clipboard_get(), "SELECT amostra.nome\nFROM amostra\nWHERE amostra.id = %s")
-        botoes["Nova consulta"].invoke()
+        botoes["Voltar à requisição"].invoke()
         self.assertFalse(self.widgets(self.raiz, self.ui.tk.Toplevel))
         self.assertEqual(json.loads(self.app.editor.get("1.0", "end-1c")), PEDIDO)
 
     def test_falha_preserva_editor_e_permite_reexecucao(self):
         self.servico.side_effect = [ValueError("Campo desconhecido"), (RESULTADO, "OK")]
         self.app.editor.insert("1.0", json.dumps(PEDIDO))
-        with patch.object(self.ui.messagebox, "showerror") as erro:
-            self.app.executar()
-            self.aguardar(lambda: not self.app.ocupada)
-        self.assertIn("Campo desconhecido", erro.call_args.args)
+        self.app.executar()
+        self.aguardar(lambda: not self.app.ocupada)
+        self.assertIsNotNone(self.app.erro)
         self.assertEqual(str(self.app.editor.cget("state")), "normal")
         self.app.executar()
         self.aguardar(lambda: not self.app.ocupada)
@@ -178,7 +177,7 @@ class JanelasTk(unittest.TestCase):
     def test_tabela_paginada_e_sql_preserva_literais(self):
         sql = "SELECT 'FROM x WHERE y', t.`GROUP BY` FROM t WHERE t.id = %s"
         self.assertEqual(self.ui.formatar_sql(sql),
-                         "SELECT 'FROM x WHERE y', t.`GROUP BY`\nFROM t\nWHERE t.id = %s")
+                         "SELECT 'FROM x WHERE y',\n    t.`GROUP BY`\nFROM t\nWHERE t.id = %s")
         self.ui._tabela(self.raiz, [{"id": i} for i in range(101)])
         grade = self.widgets(self.raiz, self.ui.ttk.Treeview)[0]
         botoes = {b.cget("text"): b for b in self.widgets(self.raiz, self.ui.ttk.Button)}

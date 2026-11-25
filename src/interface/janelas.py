@@ -4,7 +4,11 @@ import os
 import queue
 import threading
 import tkinter as tk
-from tkinter import font, messagebox, ttk
+from tkinter import filedialog, ttk
+from pathlib import Path
+import re
+from src.interface.processamento import Progresso, ETAPAS, EVENTOS, ORIENTACOES
+from src.interface.registros import Tabela as _tabela, gravar, escolher_exportacao
 
 from sqlglot import Dialect
 from sqlglot.errors import TokenError
@@ -13,10 +17,11 @@ from src.agente.config import OllamaConfig
 from src.agente.entrada import interpretar_json
 
 
-FUNDO, PAINEL, BORDA = "#101923", "#192532", "#334557"
-TEXTO, SUAVE, DESTAQUE = "#e6eef5", "#a5b8c9", "#78dfcf"
+from src.interface.visual import (FUNDO, PAINEL, BORDA, TEXTO, SUAVE, DESTAQUE, ERRO, ESPACO,
+                                  painel, rotulo, indicador, cabecalho, estilo, icone_ambiente)
+
 CLAUSULAS = {"FROM", "WHERE", "GROUP_BY", "ORDER_BY", "LIMIT", "HAVING",
-             "JOIN", "LEFT", "RIGHT", "INNER", "CROSS", "AND"}
+             "JOIN", "LEFT", "RIGHT", "INNER", "CROSS", "AND", "ON"}
 PALAVRAS_SQL = CLAUSULAS | {"SELECT", "ON", "AS", "OR", "DISTINCT", "OUTER"}
 
 
@@ -29,42 +34,29 @@ def formatar_sql(sql):
     partes = []
     anterior = 0
     tipo_anterior = ""
+    profundidade = 0
+    projetando = True
     for token in tokens:
         separador = sql[anterior:token.start]
         tipo = token.token_type.name
+        if tipo == "FROM" and profundidade == 0:
+            projetando = False
+        if projetando and tipo_anterior == "COMMA" and profundidade == 0 and not separador.strip():
+            separador = "\n    "
         if tipo in CLAUSULAS and separador.isspace():
             if tipo != "JOIN" or tipo_anterior not in {"INNER", "LEFT", "RIGHT", "CROSS", "OUTER"}:
-                separador = "\n"
+                separador = "\n    " if tipo in {"ON", "AND"} else "\n"
         partes.extend((separador, sql[token.start:token.end + 1]))
         anterior = token.end + 1
         tipo_anterior = tipo
+        if tipo == "L_PAREN":
+            profundidade += 1
+        elif tipo == "R_PAREN":
+            profundidade -= 1
     return "".join(partes) + sql[anterior:]
 
 
-def _estilo(raiz):
-    font.nametofont("TkFixedFont", root=raiz).configure(size=11)
-    estilo = ttk.Style(raiz)
-    estilo.theme_use("clam")
-    raiz.configure(bg=FUNDO)
-    estilo.configure(".", background=FUNDO, foreground=TEXTO, fieldbackground=PAINEL,
-                     bordercolor=BORDA, lightcolor=BORDA, darkcolor=BORDA)
-    familia = font.nametofont("TkDefaultFont", root=raiz).actual("family")
-    estilo.configure("Titulo.TLabel", font=(familia, 21, "bold"))
-    estilo.configure("Suave.TLabel", foreground=SUAVE)
-    estilo.configure("TButton", padding=(14, 8), background=PAINEL)
-    estilo.map("TButton", background=[("active", BORDA)], foreground=[("disabled", SUAVE)])
-    estilo.configure("Executar.TButton", background=DESTAQUE, foreground=FUNDO)
-    estilo.map("Executar.TButton", background=[("disabled", PAINEL), ("active", "#a3ecdf")],
-               foreground=[("disabled", SUAVE)])
-    estilo.configure("TNotebook.Tab", padding=(12, 8), background=PAINEL)
-    estilo.map("TNotebook.Tab", foreground=[("selected", DESTAQUE)], background=[("selected", FUNDO)])
-    estilo.configure("Treeview", rowheight=28)
-    estilo.configure("Treeview.Heading", background=BORDA, padding=5)
-    estilo.configure("TScrollbar", background=BORDA, troughcolor=PAINEL)
-    estilo.map("TScrollbar", background=[("disabled", PAINEL), ("active", "#506579")])
-
-
-def _area(pai, numerar=False):
+def _area(pai, numerar=False, json_editor=False):
     quadro = ttk.Frame(pai)
     quadro.pack(fill="both", expand=True)
     quadro.rowconfigure(0, weight=1)
@@ -83,6 +75,8 @@ def _area(pai, numerar=False):
         margem.grid(row=0, column=0, sticky="ns")
 
         def desenhar(*_):
+            if json_editor:
+                colorir(texto)
             margem.delete("all")
             linha = int(texto.index("@0,0").split(".")[0])
             while (info := texto.dlineinfo(f"{linha}.0")) is not None:
@@ -107,7 +101,7 @@ def _area(pai, numerar=False):
 
 
 def _leitura(pai, conteudo, sql=False):
-    texto = _area(pai)
+    texto = _area(pai, numerar=sql)
     texto.insert("1.0", conteudo)
     if sql:
         texto.tag_configure("sql", foreground=DESTAQUE)
@@ -126,104 +120,212 @@ def _json(valor):
     return json.dumps(valor, ensure_ascii=False, indent=2, default=str)
 
 
-def _tabela(pai, registros):
-    if not registros:
-        ttk.Label(pai, text="Nenhum registro encontrado.").pack(anchor="w")
-        return
-    colunas = list(registros[0])
-    quadro = ttk.Frame(pai)
-    quadro.pack(fill="both", expand=True)
-    quadro.rowconfigure(0, weight=1)
-    quadro.columnconfigure(0, weight=1)
-    ids = [f"c{i}" for i in range(len(colunas))]
-    tabela = ttk.Treeview(quadro, columns=ids, show="headings")
-    fonte = font.nametofont("TkDefaultFont", root=pai)
-    for identificador, nome in zip(ids, colunas):
-        tabela.heading(identificador, text=nome)
-        amostra = [nome, *(str(linha[nome])[:80] for linha in registros[:20])]
-        largura = max(120, min(420, max(map(fonte.measure, amostra)) + 28))
-        tabela.column(identificador, width=largura, minwidth=largura, stretch=True)
-    tabela.grid(row=0, column=0, sticky="nsew")
-    vertical = ttk.Scrollbar(quadro, command=tabela.yview)
-    horizontal = ttk.Scrollbar(quadro, orient="horizontal", command=tabela.xview)
-    vertical.grid(row=0, column=1, sticky="ns")
-    horizontal.grid(row=1, column=0, sticky="ew")
-    tabela.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
-    controles = ttk.Frame(pai)
-    controles.pack(fill="x", pady=(8, 0))
-    pagina = 0
+MODELO = {"versao": "1.0", "entidade": "<entidade>", "campos": ["<campo solicitado>"],
+          "filtros": {}, "agrupamento": [], "agregacoes": []}
 
-    def mostrar(indice):
-        nonlocal pagina
-        pagina = indice
-        tabela.delete(*tabela.get_children())
-        for linha in registros[indice:indice + 100]:
-            tabela.insert("", "end", values=["NULL" if linha[c] is None else str(linha[c]) for c in colunas])
-        anterior.configure(state="normal" if indice else "disabled")
-        proxima.configure(state="normal" if indice + 100 < len(registros) else "disabled")
-        posicao.configure(text=f"{indice + 1}–{min(indice + 100, len(registros))} de {len(registros)}")
+JSON_TOKENS = re.compile(r'("(?:\\.|[^"\\])*")\s*(:)?|\b(?:true|false|null|-?\d+(?:\.\d+)?)\b')
 
-    anterior = ttk.Button(controles, text="Anterior", command=lambda: mostrar(pagina - 100))
-    proxima = ttk.Button(controles, text="Próxima", command=lambda: mostrar(pagina + 100))
-    posicao = ttk.Label(controles, style="Suave.TLabel")
-    if len(registros) > 100:
-        anterior.pack(side="left")
-        posicao.pack(side="left", padx=12)
-        proxima.pack(side="left")
-    mostrar(0)
+
+def colorir(texto):
+    inicio = texto.index("@0,0 linestart")
+    fim = texto.index(f"@0,{texto.winfo_height()} lineend")
+    trecho = texto.get(inicio, fim)
+    for tag in ("chave", "valor", "numero"):
+        texto.tag_remove(tag, inicio, fim)
+    for match in JSON_TOKENS.finditer(trecho):
+        tag = "chave" if match[2] else "valor" if match[1] else "numero"
+        texto.tag_add(tag, f"{inicio}+{match.start()}c", f"{inicio}+{match.end()}c")
+
+
+def indentar(evento):
+    texto = evento.widget
+    antes = texto.get("insert linestart", "insert")
+    espacos = re.match(r"\s*", antes)[0]
+    if antes.rstrip().endswith(("{", "[")):
+        espacos += "  "
+    texto.insert("insert", "\n"+espacos)
+    return "break"
 
 
 class Aplicacao:
     def __init__(self, raiz, processar):
-        self.raiz = raiz
-        self.processar = processar
+        self.raiz, self.processar = raiz, processar
         self.fila = queue.Queue()
-        self.ocupada = False
-        self.fechando = False
+        self.ocupada = self.fechando = False
+        self.anterior = None
         raiz.title("Agente Inteligente Local")
-        raiz.geometry("940x680")
-        raiz.minsize(580, 420)
-        _estilo(raiz)
-        quadro = ttk.Frame(raiz, padding=24)
-        quadro.pack(fill="both", expand=True)
-        ttk.Label(quadro, text="Agente Inteligente Local", style="Titulo.TLabel").pack(anchor="w")
-        config = OllamaConfig.from_environment()
-        self.conexao = (f"{os.getenv('MYSQL_DATABASE', 'agente_experimental')}    ·    "
-                        f"Modelo: {config.model or 'não configurado'}")
-        ttk.Label(quadro, text=f"Banco configurado: {self.conexao}", style="Suave.TLabel").pack(anchor="w", pady=(4, 22))
-        ttk.Label(quadro, text="Requisição JSON  ·  v1.0").pack(anchor="w", pady=(0, 8))
-        self.editor = _area(quadro, numerar=True)
-        self.estado = tk.StringVar(value="Insira a requisição JSON.")
-        ttk.Label(quadro, textvariable=self.estado, style="Suave.TLabel").pack(anchor="w", pady=10)
-        acoes = ttk.Frame(quadro)
-        acoes.pack(fill="x")
+        raiz.geometry(f"{min(1152, raiz.winfo_screenwidth()-50)}x{min(720, raiz.winfo_screenheight()-85)}")
+        raiz.minsize(800, 560)
+        estilo(raiz)
+        self.quadro = ttk.Frame(raiz, padding=(24, 18))
+        self.quadro.pack(fill="both", expand=True)
+        cabecalho(self.quadro, "Agente Inteligente Local", "Assistente inteligente de consultas SQL")
+        self.estado = tk.StringVar(value="Pronto para editar")
+        rodape = ttk.Frame(self.quadro)
+        rodape.pack(side="bottom", fill="x", pady=(12, 0))
+        ttk.Label(rodape, textvariable=self.estado, style="Suave.TLabel", wraplength=450).pack(side="left")
         self.botoes = []
-        for rotulo, funcao, lado in [("Executar consulta", self.executar, "right"),
-                                     ("Validar JSON", self.validar, "left"), ("Limpar", self.limpar, "left")]:
-            botao = ttk.Button(acoes, text=rotulo, command=funcao,
-                               style="Executar.TButton" if lado == "right" else "TButton")
-            botao.pack(side=lado, padx=(0, 8) if lado == "left" else 0)
-            self.botoes.append(botao)
+        self.acao = self.botao(rodape, "Executar consulta", self.executar, principal=True)
+        self.acao.pack(side="right")
+        corpo = ttk.Frame(self.quadro)
+        corpo.pack(fill="both", expand=True)
+        self.lateral = painel(corpo, width=225)
+        self.lateral.pack(side="right", fill="y", padx=(14, 0))
+        rotulo(self.lateral, "Ambiente da sessão", "Secao").pack(anchor="w", pady=(2, 14))
+        config = OllamaConfig.from_environment()
+        self.banco = os.getenv("MYSQL_DATABASE", "agente_experimental")
+        self.modelo = config.model or "Não configurado"
+        self.conexao = tk.StringVar(value="Não verificada")
+        for nome, valor in [("Banco de dados", self.banco), ("Modelo local", self.modelo),
+                            ("Conexão MySQL", None), ("Processamento", "Local"),
+                            ("Acesso do agente", "Somente leitura")]:
+            cartao = tk.Frame(self.lateral, bg=PAINEL)
+            cartao.pack(fill="x", pady=(0, 15))
+            icone_ambiente(cartao, nome).pack(side="left", anchor="n", padx=(0, 9))
+            rotulo(cartao, nome, "Legenda").pack(anchor="w")
+            rotulo(cartao, valor or "", "Sucesso" if nome == "Acesso do agente" else "Secao",
+                   **({"textvariable": self.conexao} if valor is None else {}),
+                   wraplength=178).pack(anchor="w", pady=(3, 0))
+        self.centro = ttk.Frame(corpo)
+        self.centro.pack(fill="both", expand=True)
+        self.ambiente_btn = ttk.Button(rodape, text="Ambiente", command=self.alternar_ambiente)
+        self.compacta = False
+        def adaptar(evento):
+            estreita = evento.width < raiz.winfo_fpixels("660p")
+            if estreita != self.compacta:
+                self.compacta = estreita
+                if estreita:
+                    self.lateral.pack_forget()
+                    self.ambiente_btn.pack(side="right", padx=8)
+                else:
+                    self.ambiente_btn.pack_forget()
+                    self.lateral.pack(side="right", before=self.centro, fill="y", padx=(14, 0))
+        corpo.bind("<Configure>", adaptar)
+        self.entrada = painel(self.centro)
+        self.entrada.pack(fill="both", expand=True)
+        topo = tk.Frame(self.entrada, bg=PAINEL)
+        topo.pack(fill="x")
+        rotulo(topo, "Requisição JSON", "Secao").pack(side="left")
+        rotulo(topo, "Contrato v1.0", "Legenda").pack(side="right")
+        rotulo(self.entrada, "Substitua os campos entre < > ou importe uma requisição.").pack(anchor="w", pady=(3, 9))
+        barra = tk.Frame(self.entrada, bg=PAINEL)
+        barra.pack(fill="x", pady=(0, 8))
+        for nome, funcao in [("Importar JSON", self.importar), ("Formatar", self.formatar),
+                             ("Validar JSON", self.validar), ("Limpar", self.limpar)]:
+            self.botao(barra, nome, funcao).pack(side="left", padx=(0, 5))
+        self.editor = _area(self.entrada, True, json_editor=True)
+        for tag, cor in [("chave", DESTAQUE), ("valor", TEXTO), ("numero", "#B7C8ED")]:
+            self.editor.tag_configure(tag, foreground=cor)
+        self.editor.tag_configure("falha", underline=True, foreground=ERRO)
+        self.editor.bind("<Return>", indentar)
+        def atalho(acao):
+            def chamar(_):
+                if not self.ocupada and self.raiz.state() != "withdrawn":
+                    acao()
+                return "break"
+            return chamar
+        raiz.bind("<Control-o>", atalho(self.importar))
+        raiz.bind("<Control-Shift-F>", atalho(self.formatar))
+        self.editor.bind("<Control-Return>", atalho(self.executar))
+        self.editor.bind("<Tab>", self._tab)
+        self.editor.insert("1.0", _json(MODELO))
+        self.progresso = Progresso(self.centro)
+        self.erro = None
         raiz.protocol("WM_DELETE_WINDOW", self.encerrar)
         self.editor.focus_set()
 
-    def limpar(self):
-        self.editor.delete("1.0", "end")
-        self.estado.set("Insira a requisição JSON.")
+    def _tab(self, _):
+        self.editor.tk_focusNext().focus_set()
+        return "break"
+
+    def alternar_ambiente(self):
+        if self.lateral.winfo_manager():
+            self.lateral.pack_forget()
+        else:
+            self.lateral.pack(side="right", before=self.centro, fill="y", padx=(12, 0))
+
+    def botao(self, pai, nome, funcao, principal=False):
+        b = ttk.Button(pai, text=nome, command=funcao, style="Executar.TButton" if principal else "TButton")
+        self.botoes.append(b)
+        return b
+
+    def limpar_erro(self):
+        if self.erro:
+            self.erro.destroy()
+            self.erro = None
+        self.editor.tag_remove("falha", "1.0", "end")
+
+    def exibir_erro(self, etapa, descricao, tecnico):
+        self.limpar_erro()
+        self.erro = painel(self.centro)
+        self.erro.pack(before=self.entrada, fill="x", pady=(0, 8))
+        rotulo(self.erro, f"Falha · {ETAPAS[etapa]}", "Erro").pack(anchor="w")
+        rotulo(self.erro, descricao, wraplength=470).pack(anchor="w", pady=3)
+        detalhes = rotulo(self.erro, tecnico, wraplength=470)
+        def alternar():
+            if detalhes.winfo_manager():
+                detalhes.pack_forget()
+            else:
+                detalhes.pack(anchor="w")
+        acoes = tk.Frame(self.erro, bg=PAINEL)
+        acoes.pack(anchor="w")
+        ttk.Button(acoes, text="Detalhes técnicos", command=alternar).pack(side="left")
+        def corrigir():
+            self.limpar_erro()
+            self.editor.focus_set()
+        ttk.Button(acoes, text="Editar requisição", command=corrigir).pack(side="left", padx=6)
+        self.estado.set("Revise a requisição para tentar novamente.")
         self.editor.focus_set()
 
-    def validar(self):
-        try:
-            pedido = interpretar_json(self.editor.get("1.0", "end-1c"))
-        except ValueError as erro:
-            self.estado.set("Corrija a requisição e valide novamente.")
-            messagebox.showerror("Requisição inválida", str(erro), parent=self.raiz)
-            self.editor.focus_set()
-            return None
+    def trocar_texto(self, texto):
+        self.limpar_erro()
         self.editor.delete("1.0", "end")
-        self.editor.insert("1.0", _json(pedido))
-        self.estado.set("JSON válido pelo contrato v1.0.")
+        self.editor.insert("1.0", texto)
+
+    def limpar(self):
+        self.trocar_texto("")
+        self.estado.set("Editor vazio.")
+        self.editor.focus_set()
+
+    def importar(self):
+        arquivo = filedialog.askopenfilename(parent=self.raiz, filetypes=[("Requisição JSON", "*.json")])
+        if arquivo:
+            try:
+                texto = Path(arquivo).read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeError) as exc:
+                self.exibir_erro(0, "Escolha um arquivo JSON legível em UTF-8.", type(exc).__name__)
+                return
+            self.trocar_texto(texto)
+            self.estado.set("Arquivo importado. Valide a requisição.")
+
+    def validar(self, apenas_formatar=False):
+        self.limpar_erro()
+        bruto = self.editor.get("1.0", "end-1c")
+        try:
+            pedido = json.loads(bruto) if apenas_formatar else interpretar_json(bruto)
+        except ValueError as exc:
+            try:
+                json.loads(bruto)
+            except json.JSONDecodeError as sintaxe:
+                pos = f"{sintaxe.lineno}.{sintaxe.colno-1}"
+                self.exibir_erro(0, f"JSON inválido na linha {sintaxe.lineno}, coluna {sintaxe.colno}.",
+                                 "JSONDecodeError · " + sintaxe.msg)
+                self.editor.tag_add("falha", f"{pos} linestart", f"{pos} lineend +1c")
+                self.editor.mark_set("insert", pos)
+                self.editor.see(pos)
+                return None
+            # O validador pode incluir valores fornecidos pelo usuário na exceção.
+            dados = json.loads(bruto)
+            faltam = [k for k in MODELO if isinstance(dados, dict) and k not in dados]
+            descricao = ("Preencha: " + ", ".join(faltam) + ".") if faltam else ORIENTACOES[0]
+            self.exibir_erro(0, descricao, "Contrato v1.0 · " + type(exc).__name__)
+            return None
+        self.trocar_texto(_json(pedido))
+        self.estado.set("JSON formatado." if apenas_formatar else "JSON válido pelo contrato v1.0.")
         return pedido
+
+    def formatar(self):
+        self.validar(apenas_formatar=True)
 
     def _ocupacao(self, ativa):
         self.ocupada = ativa
@@ -235,9 +337,16 @@ class Aplicacao:
     def executar(self):
         if self.ocupada:
             return
+        self.progresso.iniciar()
         pedido = self.validar()
         if pedido is None:
+            self.progresso.finalizar(False)
             return
+        self.anterior = pedido
+        self.progresso.concluir_etapa()
+        self.entrada.pack_forget()
+        self.progresso.caixa.pack(fill="both", expand=True)
+        self.conexao.set("Não verificada")
         self._ocupacao(True)
 
         def trabalhar():
@@ -245,25 +354,39 @@ class Aplicacao:
                 resultado = self.processar(pedido, lambda etapa: self.fila.put(("etapa", etapa)))
                 self.fila.put(("resultado", resultado))
             except Exception as erro:
-                self.fila.put(("erro", str(erro) or type(erro).__name__))
+                self.fila.put(("erro", type(erro).__name__))
 
         threading.Thread(target=trabalhar, name="consulta-local").start()
         self.raiz.after(20, self._ler_eventos)
 
     def _ler_eventos(self):
+        self.progresso.relogio()
         while not self.fila.empty():
             tipo, valor = self.fila.get_nowait()
             if tipo == "etapa":
+                nome = valor.split(" · ")[0]
+                if nome in EVENTOS:
+                    self.progresso.entrar(EVENTOS[nome])
+                if nome == "Descoberta da estrutura":
+                    self.conexao.set("Conectada")
+                if nome == "Estrutura carregada":
+                    self.progresso.concluir_etapa()
                 if not self.fechando:
                     self.estado.set(valor)
                 continue
+            self.progresso.finalizar(tipo == "resultado")
+            self.progresso.caixa.pack_forget()
+            self.entrada.pack(fill="both", expand=True)
+            if self.conexao.get() == "Conectada":
+                self.conexao.set("Sessão encerrada")
             self._ocupacao(False)
             if self.fechando:
                 self.raiz.destroy()
             elif tipo == "erro":
-                self.estado.set(f"Falha durante a consulta · {self.estado.get()}")
-                messagebox.showerror("Falha na consulta", valor, parent=self.raiz)
-                self.editor.focus_set()
+                etapa = self.progresso.atual
+                if etapa == 2:
+                    self.conexao.set("Falha na conexão")
+                self.exibir_erro(etapa, ORIENTACOES[etapa], f"Etapa {etapa+1} · {valor}")
             else:
                 self.estado.set("Consulta concluída.")
                 self.resultados(*valor)
@@ -278,70 +401,117 @@ class Aplicacao:
             self.raiz.destroy()
 
     def resultados(self, resposta, aviso):
+        from src.interface.analise import segundos, interpretacao, metricas
         janela = tk.Toplevel(self.raiz)
-        janela.title("Resultados · Agente Inteligente Local")
+        janela.title("Consulta concluída · Agente Inteligente Local")
         janela.geometry(self.raiz.geometry())
-        janela.minsize(580, 420)
+        janela.minsize(800, 560)
         self.raiz.withdraw()
-        quadro = ttk.Frame(janela, padding=24)
+        quadro = ttk.Frame(janela, padding=(24, 16))
         quadro.pack(fill="both", expand=True)
-        ttk.Label(quadro, text="Resultado da consulta", style="Titulo.TLabel").pack(anchor="w")
         total = resposta["total_registros"]
-        unidade = "registro recuperado" if total == 1 else "registros recuperados"
-        ttk.Label(quadro, text=f"{total} {unidade}    ·    Banco: {self.conexao}",
-                  style="Suave.TLabel").pack(anchor="w", pady=(4, 18))
+        cabecalho(quadro, "Consulta concluída", f"Consulta executada em {self.banco}  ·  "
+                  + ("Nenhum registro recuperado." if not total else "Resultados disponíveis para consulta."), True)
+        m = resposta["metricas"]
+        cards = ttk.Frame(quadro)
+        cards.pack(fill="x", pady=(0, 12))
+        for i, (titulo, valor) in enumerate([
+            ("Registros recuperados", total), ("Tempo da requisição", segundos(m.get("tempo_total_segundos"))),
+            ("Tentativas de interpretação", m.get("tentativas_interpretacao")), ("Tentativas SQL", m.get("tentativas_sql"))
+        ]):
+            cards.columnconfigure(i, weight=1, uniform="resumo")
+            caixa, _ = indicador(cards, titulo, "—" if valor is None else str(valor))
+            caixa.grid(row=0, column=i, sticky="nsew", padx=(0, 8) if i < 3 else 0)
+        rodape = ttk.Frame(quadro)
+        rodape.pack(side="bottom", fill="x", pady=(10, 0))
         abas = ttk.Notebook(quadro)
         abas.pack(fill="both", expand=True)
+        abas.enable_traversal()
         secoes = []
         for nome in ("Consulta SQL", "Resultados", "Interpretação", "Métricas"):
-            secao = ttk.Frame(abas, padding=12)
+            secao = ttk.Frame(abas, padding=10)
             abas.add(secao, text=nome)
             secoes.append(secao)
-        sql, tabela, interpretacao, metricas = secoes
+        sql, tabela, plano, met = secoes
         consulta = formatar_sql(resposta["consulta_sql"])
+        parametros = _json(resposta["parametros"])
+        barra = ttk.Frame(sql)
+        barra.pack(fill="x", pady=(0, 6))
+        retorno = tk.StringVar(janela)
+        ttk.Label(barra, textvariable=retorno, style="Sucesso.TLabel").pack(side="left")
 
-        def copiar():
+        def copiar(conteudo, mensagem):
             janela.clipboard_clear()
-            janela.clipboard_append(consulta)
-            copiar_btn.configure(text="SQL copiada")
+            janela.clipboard_append(conteudo)
+            retorno.set(mensagem)
 
-        copiar_btn = ttk.Button(sql, text="Copiar SQL", command=copiar)
-        copiar_btn.pack(anchor="e", pady=(0, 8))
+        def salvar_sql():
+            caminho = filedialog.asksaveasfilename(parent=janela, defaultextension=".sql", filetypes=[("SQL", "*.sql")])
+            if caminho:
+                try:
+                    gravar(caminho, resposta["consulta_sql"], "sql")
+                    retorno.set("SQL salva.")
+                except OSError:
+                    retorno.set("Falha ao salvar. Confira a pasta.")
+        for nome, funcao in [("Salvar SQL", salvar_sql),
+                             ("Copiar parâmetros", lambda: copiar(parametros, "Parâmetros copiados.")),
+                             ("Copiar SQL", lambda: copiar(consulta, "SQL copiada."))]:
+            ttk.Button(barra, text=nome, command=funcao).pack(side="right", padx=(6, 0))
         suporte = ttk.Panedwindow(sql, orient="vertical")
         suporte.pack(fill="both", expand=True)
         for titulo, conteudo, destaque, peso in [
-            ("SQL", consulta, True, 3), ("Parâmetros", _json(resposta["parametros"]), False, 1)
+            ("SQL aprovada", consulta, True, 4), ("Parâmetros", parametros, False, 1)
         ]:
             bloco = ttk.Frame(suporte)
             suporte.add(bloco, weight=peso)
-            ttk.Label(bloco, text=titulo).pack(anchor="w", pady=4)
+            ttk.Label(bloco, text=titulo, style="Legenda.TLabel").pack(anchor="w", pady=3)
             _leitura(bloco, conteudo, destaque)
         _tabela(tabela, resposta["registros"])
-        _leitura(interpretacao, _json(resposta["interpretacao"]))
-        ttk.Label(metricas, text=aviso, wraplength=520, style="Suave.TLabel").pack(anchor="w", pady=(0, 8))
-        linhas_metricas = []
-        for nome, valor in resposta["metricas"].items():
-            itens = valor.items() if isinstance(valor, dict) else [(nome, valor)]
-            for chave, dado in itens:
-                rotulo = chave.removesuffix("_segundos").replace("_", " ").capitalize()
-                if isinstance(valor, dict):
-                    rotulo = f"{nome.capitalize()} · {rotulo}"
-                exibido = "—" if dado is None else str(dado)
-                if chave.endswith("_segundos") and dado is not None:
-                    exibido = f"{dado:.4f} s"
-                linhas_metricas.append({"Métrica": rotulo, "Valor": exibido})
-        _tabela(metricas, linhas_metricas)
+        interpretacao(plano, resposta["interpretacao"], self.anterior or {}, _leitura)
+        metricas(met, m, aviso)
 
-        def nova():
+        def voltar(nova=False):
             janela.destroy()
             self.raiz.deiconify()
+            if nova:
+                self.trocar_texto(_json(MODELO))
+                self.estado.set("Nova requisição.")
             self.editor.focus_set()
 
-        rodape = ttk.Frame(quadro)
-        rodape.pack(fill="x", pady=(12, 0))
+        def exportar():
+            caminho = escolher_exportacao(janela)
+            if not caminho:
+                return
+            formato = Path(caminho).suffix.lower().lstrip(".")
+            if formato not in {"csv", "json"}:
+                status.set("Escolha .csv ou .json.")
+                return
+            exportacao.configure(state="disabled")
+            status.set("Exportando…")
+            eventos = queue.Queue()
+            def escrever():
+                try:
+                    gravar(caminho, resposta["registros"], formato)
+                    eventos.put("Exportação concluída.")
+                except (ValueError, TypeError, OSError):
+                    eventos.put("Falha ao gravar. Confira a pasta.")
+            def conferir():
+                if eventos.empty():
+                    janela.after(60, conferir)
+                else:
+                    status.set(eventos.get_nowait())
+                    exportacao.configure(state="normal")
+            threading.Thread(target=escrever, name="exportacao-local").start()
+            janela.after(60, conferir)
         ttk.Button(rodape, text="Encerrar", command=self.encerrar).pack(side="left")
-        ttk.Button(rodape, text="Nova consulta", command=nova, style="Executar.TButton").pack(side="right")
-        janela.protocol("WM_DELETE_WINDOW", nova)
+        exportacao = ttk.Button(rodape, text="Exportar resultados", command=exportar)
+        exportacao.pack(side="left", padx=6)
+        status = tk.StringVar(janela)
+        ttk.Label(rodape, textvariable=status, style="Suave.TLabel").pack(side="left")
+        ttk.Button(rodape, text="Nova consulta", command=lambda: voltar(True),
+                   style="Executar.TButton").pack(side="right")
+        ttk.Button(rodape, text="Voltar à requisição", command=voltar).pack(side="right", padx=6)
+        janela.protocol("WM_DELETE_WINDOW", voltar)
         janela.focus_set()
 
 
