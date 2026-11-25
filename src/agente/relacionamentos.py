@@ -118,6 +118,77 @@ def _caminho(vizinhos, inicio, fim, *, permitidas=None, ignorar=None):
     return None
 
 
+def _papel_neutro(componentes, destino):
+    return any(
+        _termos(r["origem"].casefold().split(".")[1].removeprefix("id_").removesuffix("_id"))
+        == _termos(destino) for r in componentes
+    )
+
+
+def _plano_com_intermediarias(inicio, necessarias, extremos, chaves, papeis, permitidas,
+                              requisicao, estrutura, referencias):
+    """Árvore de FKs da entidade para os pais. Exige que atenda a todas as âncoras."""
+    medidas = {a["campo"].split(".")[0].casefold() for a in requisicao.get("agregacoes", [])}
+    if medidas - {inicio}:
+        return set()
+
+    pais = defaultdict(list)
+    sustentadas = set(permitidas)
+    for opcoes in papeis.values():
+        indicadas = _papeis_indicados(opcoes)
+        candidatas = indicadas if len(indicadas) == 1 else opcoes
+        for ch in candidatas:
+            origem, destino = extremos[ch]
+            pais[origem].append((destino, ch))
+            if ch in indicadas or _papel_neutro(chaves[ch], destino):
+                sustentadas.add(ch)
+
+    # Uma única travessia descobre pais inclusive fora das tabelas solicitadas.
+    anteriores = {inicio: None}
+    fila = deque([inicio])
+    while fila:
+        atual = fila.popleft()
+        for pai, ch in pais[atual]:
+            if pai not in anteriores:
+                anteriores[pai] = (atual, ch)
+                fila.append(pai)
+    if not necessarias <= anteriores.keys():
+        return set()
+
+    plano = set()
+    for ancora in necessarias:
+        atual = ancora
+        while atual != inicio:
+            anterior, ch = anteriores[atual]
+            if ch in plano:
+                break
+            plano.add(ch)
+            atual = anterior
+    tem_intermediaria = any(set(extremos[ch]) - necessarias for ch in plano)
+    comprovado = tem_intermediaria and plano <= sustentadas
+    catalogo = {t.casefold(): dados for t, dados in estrutura["tabelas"].items()}
+    for ch in plano:
+        _, destino = extremos[ch]
+        # Uma segunda rota dirigida até esse vértice também altera o papel
+        # de todos os descendentes no plano, mesmo que ela seja mais longa.
+        alternativa = _caminho(pais, inicio, destino, ignorar=ch)
+        if alternativa is not None:
+            if medidas and (tem_intermediaria or any(set(extremos[c]) - necessarias for c in alternativa)):
+                # Um caminho já autorizado entre as âncoras pode esconder
+                # outra associação muitos-para-um através de uma intermediária.
+                if not any(r["origem"].casefold() in referencias for r in chaves[ch]):
+                    raise ValueError(f"Caminho ambíguo entre {inicio} e {destino}. Especifique o papel da FK.")
+            comprovado = False
+        colunas = catalogo[destino]["colunas"]
+        # COLUMN_KEY permite reconstruir a PK completa, inclusive composta.
+        # Inferir unicidade de uma coluna de outro índice exigiria sua definição.
+        referidas = {r["destino"].split(".")[1].casefold() for r in chaves[ch]}
+        primarias = {c["nome"].casefold() for c in colunas if c.get("chave") == "PRI"}
+        if not primarias or not primarias <= referidas:
+            comprovado = False
+    return plano if comprovado else set()
+
+
 def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, requisicao: dict):
     """Liga campos, filtros e entidade. Uma proposta do LLM sozinha não desfaz empates."""
     chaves = chaves_do_catalogo(estrutura)
@@ -133,8 +204,7 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
     termos.extend(requisicao.get("agrupamento", []))
     termos.extend(a["campo"] for a in requisicao.get("agregacoes", []))
     referencias = {t.strip().casefold() for t in termos}
-    # Uma referência física aponta a coluna, não necessariamente o papel da tabela
-    # do outro lado. Use a descrição natural apenas entre tabelas efetivamente pedidas.
+    # Guarde os papéis também das tabelas que podem servir de intermediárias.
     descricoes = [palavras(t) for t in termos if "." not in t]
     vizinhos = defaultdict(list)
     extremos = {}
@@ -145,7 +215,7 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
         extremos[chave] = (a, b)
         vizinhos[a].append((b, chave))
         vizinhos[b].append((a, chave))
-        if a == b or not {a, b} <= necessarias:
+        if a == b:
             continue
         explicita = False
         pistas = set()
@@ -162,7 +232,7 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
     permitidas = set()
     for opcoes in papeis.values():
         indicadas = _papeis_indicados(opcoes)
-        if len(indicadas) == 1:
+        if len(indicadas) == 1 and set(extremos[next(iter(indicadas))]) <= necessarias:
             permitidas.update(indicadas)
 
     # Dentro das tabelas efetivamente pedidas, uma cadeia de FKs com papéis
@@ -174,13 +244,9 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
             continue
         # Exija uma terceira âncora na componente e o papel da tabela destino
         # na chave de origem. Proximidade por si só não identifica um papel.
-        papel_neutro = any(
-            _termos(r["origem"].casefold().split(".")[1].removeprefix("id_").removesuffix("_id"))
-            == _termos(b) for r in chaves[ch]
-        )
         terceira_ancora = any(t not in (a, b) and t in necessarias
                               for ponta in (a, b) for t, _ in vizinhos[ponta])
-        if papel_neutro and terceira_ancora:
+        if terceira_ancora and _papel_neutro(chaves[ch], b):
             permitidas.add(ch)
 
     principais = tabelas_mencionadas(requisicao["entidade"], necessarias, entidade=True)
@@ -198,6 +264,13 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
         a, b = extremos[chave]
         if _caminho(vizinhos, a, b, ignorar=chave) is None:
             permitidas.add(chave)
+
+    if destinos and len(principais) == 1 and (requisicao.get("agregacoes") or any(
+        _caminho(vizinhos, inicio, fim, permitidas=permitidas) is None for fim in destinos
+    )):
+        permitidas.update(_plano_com_intermediarias(
+            inicio, necessarias, extremos, chaves, papeis, permitidas, requisicao, estrutura, referencias
+        ))
 
     usadas = set()
     for fim in destinos:
