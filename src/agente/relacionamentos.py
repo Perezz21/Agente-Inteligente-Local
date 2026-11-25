@@ -10,14 +10,46 @@ def palavras(texto: str) -> tuple[str, ...]:
     return tuple(re.findall(r"[^\W_]+", texto))
 
 
+def _termos(texto):
+    return tuple(p for p in palavras(texto) if p not in {"de", "do", "da", "dos", "das"})
+
+
+def _plural(singular, plural):
+    if singular.endswith("ao"):
+        return plural in {singular[:-2] + fim for fim in ("oes", "aes", "aos")}
+    if singular.endswith("m"):
+        return plural == singular[:-1] + "ns"
+    if singular.endswith(("r", "z", "s")):
+        return plural == singular + "es"
+    if singular.endswith("il"):
+        return plural == singular[:-1] + "s"
+    if singular.endswith("l"):
+        return plural == singular[:-1] + "is"
+    return plural == singular + "s"
+
+
+def _ocorrencias(frase, termo):
+    for i in range(len(frase) - len(termo) + 1):
+        if termo and all(a == b or _plural(a, b) or _plural(b, a)
+                         for a, b in zip(frase[i:], termo)):
+            yield (i, i + len(termo))
+
+
 def menciona(texto: str, nome: str) -> bool:
-    """Compara nomes compostos, como numero_evento e 'número do evento'."""
-    ligacoes = {"de", "do", "da", "dos", "das"}
-    frase = tuple(p for p in palavras(texto) if p not in ligacoes)
-    termo = tuple(p for p in palavras(nome) if p not in ligacoes)
-    return bool(termo) and any(
-        frase[i:i + len(termo)] == termo for i in range(len(frase))
-    )
+    return any(_ocorrencias(_termos(texto), _termos(nome)))
+
+
+def tabelas_mencionadas(texto, nomes, *, entidade=False):
+    """Uma menção composta domina só as menções contidas na mesma posição."""
+    if entidade and texto.strip().casefold() in nomes:
+        return {texto.strip().casefold()}
+    frase = _termos(texto)
+    ocorrencias = [(t, i, j) for t in nomes for i, j in _ocorrencias(frase, _termos(t))]
+    if entidade:
+        return {t for t, i, j in ocorrencias if i == 0 and j == len(frase)}
+    return {t for t, i, j in ocorrencias if not any(
+        a <= i and j <= b and (i, j) != (a, b) for _, a, b in ocorrencias
+    )}
 
 
 def _ocorrencias_papel(descricoes, papel):
@@ -133,7 +165,27 @@ def planejar_relacoes(necessarias: set[str], propostas: list, estrutura: dict, r
         if len(indicadas) == 1:
             permitidas.update(indicadas)
 
-    inicio, *destinos = sorted(necessarias)
+    # Dentro das tabelas efetivamente pedidas, uma cadeia de FKs com papéis
+    # coerentes pode estar completa mesmo se outra rota sair desse conjunto.
+    internas = {ch for ch, (a, b) in extremos.items() if {a, b} <= necessarias}
+    for ch in internas - permitidas:
+        a, b = extremos[ch]
+        if a == b or _caminho(vizinhos, a, b, permitidas=internas, ignorar=ch) is not None:
+            continue
+        # Exija uma terceira âncora na componente e o papel da tabela destino
+        # na chave de origem. Proximidade por si só não identifica um papel.
+        papel_neutro = any(
+            _termos(r["origem"].casefold().split(".")[1].removeprefix("id_").removesuffix("_id"))
+            == _termos(b) for r in chaves[ch]
+        )
+        terceira_ancora = any(t not in (a, b) and t in necessarias
+                              for ponta in (a, b) for t, _ in vizinhos[ponta])
+        if papel_neutro and terceira_ancora:
+            permitidas.add(ch)
+
+    principais = tabelas_mencionadas(requisicao["entidade"], necessarias, entidade=True)
+    inicio = next(iter(principais)) if len(principais) == 1 else min(necessarias)
+    destinos = sorted(necessarias - {inicio})
     candidatas = set()
     for fim in destinos:
         caminho = _caminho(vizinhos, inicio, fim)

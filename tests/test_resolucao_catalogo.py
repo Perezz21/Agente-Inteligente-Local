@@ -309,5 +309,126 @@ class CaminhosDeFK(unittest.TestCase):
                 "ON u.setor_id=s.id AND s.regiao_id=r.id", [], CATALOGO, i)
 
 
+class ContextoRelacional(unittest.TestCase):
+    def setUp(self):
+        self.principais = [fk("item_pedido.pedido_id", "pedido.id"),
+                           fk("item_pedido.produto_id", "produto.id"),
+                           fk("pedido.cliente_id", "cliente.id")]
+        self.desvio = [fk("pedido.loja_id", "loja.id"), fk("estoque.loja_id", "loja.id"),
+                       fk("estoque.produto_id", "produto.id")]
+        self.catalogo = {
+            "tabelas": {"cliente": tabela("id", "nome"), "produto": tabela("id", "nome"),
+                        "pedido": tabela("id", "cliente_id", "loja_id"),
+                        "item_pedido": tabela("quantidade", "pedido_id", "produto_id"),
+                        "estoque": tabela("quantidade", "produto_id", "loja_id"),
+                        "loja": tabela("id")},
+            "relacionamentos": self.principais + self.desvio,
+        }
+        self.r = pedido("nome do cliente", "nome do produto", "quantidade comprada",
+                        filtros={"pedido.id": 101}, entidade="itens de pedido")
+        self.i = plano("cliente.nome", "produto.nome", "item_pedido.quantidade",
+                       filtros=[filtro("pedido.id", "id")])
+        self.i["tabelas_identificadas"] = ["item_pedido", "pedido", "cliente", "produto"]
+
+    def resolver(self):
+        return resolver_mapeamento(self.i, self.r, self.catalogo)
+
+    def test_requisicao_completa_retorna_quantidade_da_linha_do_pedido(self):
+        sql = ("SELECT c.nome AS cliente, p.nome AS produto, i.quantidade FROM item_pedido i "
+               "JOIN pedido v ON i.pedido_id=v.id JOIN cliente c ON v.cliente_id=c.id "
+               "JOIN produto p ON i.produto_id=p.id WHERE v.id=%s")
+        modelo, banco = Mock(), Mock()
+        modelo.generate.side_effect = [resposta(self.i), resposta({"consulta_sql": sql, "parametros": [101]})]
+        with closing(sqlite3.connect(":memory:")) as db:
+            db.row_factory = sqlite3.Row
+            db.executescript("""
+                CREATE TABLE cliente(id,nome); INSERT INTO cliente VALUES (2,'Ana');
+                CREATE TABLE produto(id,nome); INSERT INTO produto VALUES (3,'A');
+                CREATE TABLE pedido(id,cliente_id,loja_id); INSERT INTO pedido VALUES (101,2,4);
+                CREATE TABLE item_pedido(pedido_id,produto_id,quantidade); INSERT INTO item_pedido VALUES (101,3,2);
+                CREATE TABLE loja(id); INSERT INTO loja VALUES (4);
+                CREATE TABLE estoque(loja_id,produto_id,quantidade); INSERT INTO estoque VALUES (4,3,99);
+            """)
+            def consultar(consulta, parametros):
+                return [dict(linha) for linha in db.execute(consulta.replace("%s", "?"), parametros)]
+            banco.execute_select.side_effect = consultar
+            saida = executar_requisicao(self.r, self.catalogo, modelo, banco)
+        self.assertEqual(saida["registros"], [{"cliente": "Ana", "produto": "A", "quantidade": 2}])
+        self.assertCountEqual(saida["interpretacao"]["relacionamentos_necessarios"], self.principais)
+
+    def test_plural_conectivos_e_ordem_independentes_da_sugestao(self):
+        for entidade in ("item_pedido", "itens de pedidos", "Itens dos Pedidos"):
+            self.r["entidade"] = entidade
+            self.r["campos"] = ["quantidade comprada", "nome do produto", "nome do cliente"]
+            self.i["campos_solicitados"] = ["quantidade", "produto.nome", "cliente.nome"]
+            self.catalogo["relacionamentos"].reverse()
+            with self.subTest(entidade=entidade):
+                self.assertEqual(self.resolver()["campos_solicitados"][0], "item_pedido.quantidade")
+
+    def test_composto_mais_especifico_que_tabela_contida(self):
+        self.catalogo["tabelas"]["pedido"]["colunas"].append({"nome": "quantidade"})
+        self.r["campos"][2] = "quantidade dos itens de pedido"
+        self.assertEqual(self.resolver()["campos_solicitados"][2], "item_pedido.quantidade")
+
+    def test_filtro_ancora_mesmo_quando_entidade_e_desconhecida(self):
+        self.r["entidade"] = "registros"
+        self.r["filtros"] = {"item_pedido.pedido_id": 101}
+        self.i["filtros"] = [filtro("item_pedido.pedido_id", "pedido_id")]
+        self.r["campos"] = ["quantidade comprada"]
+        self.i["campos_solicitados"] = ["quantidade"]
+        self.assertEqual(self.resolver()["campos_solicitados"], ["item_pedido.quantidade"])
+
+    def test_modelo_precisa_de_apoio_relacional(self):
+        self.r["entidade"] = "registros"
+        self.assertCountEqual(self.resolver()["relacionamentos_necessarios"], self.principais)
+        self.i["campos_solicitados"][2] = "estoque.quantidade"
+        with self.assertRaises(ValueError):
+            self.resolver()
+        self.r["filtros"] = {}
+        self.i["filtros"] = []
+        with self.assertRaisesRegex(ValueError, "ambíguo"):
+            self.resolver()
+
+    def test_outro_atributo_identifica_origem_do_filtro_homonimo(self):
+        self.catalogo["tabelas"]["estoque"]["colunas"].append({"nome": "data_inventario"})
+        self.r = pedido("data do inventário", entidade="registros", filtros={"quantidade disponível": 7})
+        self.i = plano("estoque.data_inventario", filtros=[filtro("quantidade disponível", "quantidade", 7)])
+        self.i["tabelas_identificadas"] = ["estoque"]
+        self.assertEqual(self.resolver()["filtros"][0]["campo"], "estoque.quantidade")
+
+    def test_duas_origens_com_apoio_continuam_ambiguas(self):
+        self.r["campos"] = ["item_pedido.pedido_id", "estoque.loja_id", "quantidade"]
+        self.i["campos_solicitados"] = [*self.r["campos"][:2], "item_pedido.quantidade"]
+        with self.assertRaisesRegex(ValueError, "Campo ambíguo"):
+            self.resolver()
+
+    def test_coluna_contraria_a_entidade_e_rota_adicional_recusadas(self):
+        self.i["campos_solicitados"][2] = "estoque.quantidade"
+        with self.assertRaises(ValueError):
+            self.resolver()
+        self.i["campos_solicitados"][2] = "item_pedido.quantidade"
+        self.i["relacionamentos_necessarios"] = self.desvio
+        with self.assertRaisesRegex(ValueError, "adicional"):
+            self.resolver()
+
+    def test_papeis_explicitos_sustentam_caminho_mais_longo(self):
+        c = {"tabelas": {"amostra": tabela("id", "lote_id", "arquivo"),
+                         "lote": tabela("id", "dono_id"), "pessoa": tabela("id", "nome")},
+             "relacionamentos": [fk("amostra.lote_id", "lote.id"), fk("lote.dono_id", "pessoa.id"),
+                                 fk("amostra.arquivo", "pessoa.id")]}
+        r = pedido("amostra.lote_id", "lote.dono_id", "pessoa.nome", entidade="amostras")
+        i = plano(*r["campos"])
+        i["tabelas_identificadas"] = ["amostra"]
+        self.assertEqual(resolver_mapeamento(i, r, c)["relacionamentos_necessarios"],
+                         c["relacionamentos"][:2])
+
+    def test_ciclo_no_proprio_contexto_sem_papel_distintivo(self):
+        self.catalogo["tabelas"]["item_pedido"]["colunas"].append({"nome": "contato"})
+        self.catalogo["relacionamentos"].append(fk("item_pedido.contato", "cliente.id"))
+        self.r["campos"] = ["cliente.nome", "produto.nome", "item_pedido.quantidade"]
+        with self.assertRaisesRegex(ValueError, "Caminho ambíguo"):
+            self.resolver()
+
+
 if __name__ == "__main__":
     unittest.main()

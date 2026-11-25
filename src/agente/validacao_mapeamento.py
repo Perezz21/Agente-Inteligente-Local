@@ -2,7 +2,7 @@
 import re
 from collections import defaultdict
 
-from src.agente.relacionamentos import menciona, palavras, planejar_relacoes
+from src.agente.relacionamentos import chaves_do_catalogo, menciona, palavras, planejar_relacoes, tabelas_mencionadas
 
 _NOME = r"[A-Za-z_]\w*"
 _REFERENCIA = re.compile(rf"{_NOME}\.{_NOME}")
@@ -40,14 +40,35 @@ def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> d
         for coluna in dados["colunas"]:
             colunas[coluna["nome"].casefold()].append(f"{tabela}.{coluna['nome']}")
 
-    entidade = requisicao["entidade"]
-    tabelas_entidade = {t for t in nomes if palavras(entidade) == palavras(t)}
-
-    if not tabelas_entidade:
-        tabelas_entidade = {t for t in nomes if palavras(entidade) == palavras(t + "s")
-                            or palavras(entidade + "s") == palavras(t)}
+    tabelas_entidade = tabelas_mencionadas(requisicao["entidade"], nomes, entidade=True)
     if len(tabelas_entidade) != 1:
         tabelas_entidade.clear()
+
+    # Reúna pistas antes de resolver o primeiro campo. A ordem do JSON e a
+    # lista de tabelas sugerida pelo modelo não determinam o contexto.
+    descricoes = [*requisicao["campos"], *requisicao.get("filtros", {}),
+                  *requisicao.get("agrupamento", []),
+                  *(a["campo"] for a in requisicao.get("agregacoes", []))]
+    contexto = set(tabelas_entidade)
+    for descricao in descricoes:
+        if _REFERENCIA.fullmatch(descricao):
+            tabela, nome = descricao.casefold().split(".")
+            if any(c.casefold() == descricao.casefold() for c in colunas.get(nome, [])):
+                contexto.add(tabela)
+        else:
+            citadas = tabelas_mencionadas(descricao, nomes)
+            contexto.update(citadas)
+            if not citadas:
+                atributos = tabelas_mencionadas(descricao, colunas, entidade=True)
+                origens = {c.split(".")[0].casefold() for atributo in atributos for c in colunas[atributo]}
+                if len(origens) == 1:
+                    contexto.update(origens)
+
+    vizinhas = defaultdict(set)
+    for componentes in chaves_do_catalogo(estrutura).values():
+        a, b = (componentes[0][lado].split(".")[0].casefold() for lado in ("origem", "destino"))
+        vizinhas[a].add(b)
+        vizinhas[b].add(a)
 
     def resolver(campo: str, pedido: str, *, contagem=False) -> str:
         if not isinstance(campo, str):
@@ -65,14 +86,12 @@ def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> d
         elif chave in colunas and chave != abreviado:
             raise ValueError(f"Coluna divergente para o campo solicitado {pedido!r}.")
         else:
-            tabelas_descritas = {t for t in nomes if menciona(pedido, t)}
-            if not tabelas_descritas:
-                tabelas_descritas = {
-                    t for t in nomes if menciona(pedido, t + "s")
-                    or (len(t) > 1 and t.endswith("s") and menciona(pedido, t[:-1]))
-                }
+            tabelas_descritas = tabelas_mencionadas(pedido, nomes)
             locais = [c for c in opcoes if c.split(".")[0].casefold() in tabelas_descritas]
             if locais:
+                if len(locais) > 1:
+                    raise ValueError(f"Campo ambíguo para {pedido!r}. Opções do catálogo: "
+                                     + ", ".join(sorted(locais)))
                 opcoes = locais
             elif tabelas_descritas and "." not in campo and not (
                 set(palavras(abreviado)) & set(palavras(pedido))
@@ -80,8 +99,16 @@ def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> d
                 raise ValueError(f"A coluna abreviada {campo!r} não pertence à tabela "
                                  f"indicada em {pedido!r}. Verifique a referência no catálogo.")
             elif len(opcoes) > 1:
-                contextual = [c for c in opcoes if c.split(".")[0].casefold() in tabelas_entidade]
-                if chave != abreviado or len(contextual) != 1:
+                # Um identificador genérico exige a entidade ou uma indicação
+                # no próprio campo. Para outros atributos, cruze as pistas.
+                ancoras = tabelas_entidade if abreviado in _TERMOS_ID else contexto
+                contextual = [c for c in opcoes if c.split(".")[0].casefold() in ancoras]
+                if not contextual and "." in campo and abreviado not in _TERMOS_ID:
+                    # Uma sugestão qualificada só ganha apoio estrutural se a
+                    # candidata ligar diretamente duas tabelas citadas no pedido.
+                    contextual = [c for c in opcoes if
+                                  len(vizinhas[c.split(".")[0].casefold()] & contexto) >= 2]
+                if len(contextual) != 1 or (abreviado in _TERMOS_ID and chave != abreviado):
                     raise ValueError(f"Campo ambíguo para {pedido!r}. Opções do catálogo: "
                                      + ", ".join(sorted(opcoes)))
                 opcoes = contextual
