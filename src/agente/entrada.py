@@ -34,7 +34,11 @@ def receber_json() -> dict[str, Any]:
     if not linhas:
         raise ValueError("Nenhum JSON foi informado.")
 
-    conteudo = "\n".join(linhas)
+    return interpretar_json("\n".join(linhas))
+
+
+def interpretar_json(conteudo: str) -> dict[str, Any]:
+    """Valida o texto do editor ou do terminal pelo mesmo contrato."""
 
     try:
         requisicao = json.loads(conteudo)

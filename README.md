@@ -27,7 +27,7 @@ e é documentado em
 ```
 
 **Qualquer JSON fora dessa estrutura é rejeitado antes de conectar ao banco
-ou chamar o modelo local.** O mesmo padrão vale para pedidos colados no terminal,
+ou chamar o modelo local.** O mesmo padrão vale para pedidos colados na janela ou no terminal,
 lidos de arquivo e enviados à função Python. Você pode usar qualquer nome de
 arquivo, como `pedido.json`, e reutilizá-lo para consultas diferentes.
 
@@ -46,14 +46,16 @@ python -m src.main --arquivo pedido.json
 - Executar consultas de leitura no MySQL.
 - Retornar os registros recuperados.
 
-A conversão de linguagem natural para JSON, a criação de gráficos e a interface visual não fazem parte do agente.
+A interface Tkinter recebe a requisição JSON e apresenta a SQL, os parâmetros,
+os registros, a interpretação e as métricas em abas. A conversão de linguagem
+natural para JSON e a criação de gráficos continuam fora do escopo.
 
 ## Como o agente consulta o banco
 
 O agente lê as tabelas, colunas e chaves estrangeiras do MySQL configurado.
 O Ollama interpreta o pedido com esses metadados e gera um SELECT parametrizado.
 O agente confere campos, filtros, junções e agrupamentos antes de executar a
-consulta. O terminal mostra a interpretação, o SQL aprovado e os registros.
+consulta. A interface gráfica e o terminal usam esse mesmo fluxo.
 
 Para investigar a geração, defina `AGENTE_DEPURAR_SQL=1` no arquivo `.env`.
 Esse modo exibe também as respostas brutas do modelo, incluindo parâmetros.
@@ -103,6 +105,12 @@ Execute:
 ```bash
 python -m src.main
 ```
+
+Na janela, cole o JSON. **Validar JSON** confere o contrato v1.0 e formata o
+texto. **Executar consulta** inicia o processamento. Na janela de resultados,
+**Copiar SQL** conserva os marcadores de parâmetros e **Nova consulta** reabre
+o editor com o pedido anterior. Para colar o JSON no terminal, execute
+`python -m src.main --cli`. Com `--arquivo`, o processamento permanece no terminal.
 
 O nome do modelo é configurável. Isso permitirá testar diferentes modelos sem alterar o código do agente.
 

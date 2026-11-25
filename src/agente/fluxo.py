@@ -83,7 +83,7 @@ def executar_requisicao(
 
 def _executar_requisicao_validada(
     requisicao: dict[str, Any], estrutura: dict[str, Any], modelo: Any, banco: Any,
-    *, progresso: dict | None = None,
+    *, progresso: dict | None = None, notificar=None,
 ) -> dict[str, Any]:
     """Uso interno após a validação da entrada."""
     if progresso is None:
@@ -110,6 +110,8 @@ def _executar_requisicao_validada(
                 "conserve chave_pedida, operador e valor. Se o pedido não "
                 "distinguir as opções, use status ambiguo e indique a dúvida."
             )
+        if notificar:
+            notificar(f"Interpretação da requisição · tentativa {tentativa}")
         resultado_modelo = modelo.generate(
             prompt=prompt_tentativa,
             max_tokens=1200,
@@ -149,7 +151,7 @@ def _executar_requisicao_validada(
             )
             continue
         try:
-            candidato = resolver_mapeamento(candidato, requisicao, estrutura)
+            candidato = resolver_mapeamento(candidato, requisicao, estrutura, notificar=notificar)
             erro_formato = next(_FORMATO.iter_errors(candidato), None)
             if erro_formato is not None:
                 caminho = ".".join(map(str, erro_formato.absolute_path)) or "raiz"
@@ -166,6 +168,8 @@ def _executar_requisicao_validada(
     fim_interpretacao = perf_counter()
 
     progresso.update(etapa="geracao_sql", tempo_interpretacao_segundos=fim_interpretacao - inicio)
+    if notificar:
+        notificar("Geração e validação SQL")
     gerador = SQLGenerator(modelo)
     try:
         consulta = gerador.generate(
@@ -193,6 +197,8 @@ def _executar_requisicao_validada(
     progresso.update(etapa="execucao_mysql", sql_aprovada=True, sql_sintaticamente_valida=True,
                      tentativas_sql=consulta.get("tentativas_sql"),
                      tempo_geracao_sql_segundos=fim_geracao_sql - fim_interpretacao)
+    if notificar:
+        notificar("Execução da consulta")
     registros = banco.execute_select(
         consulta=consulta["consulta_sql"],
         parametros=consulta["parametros"],

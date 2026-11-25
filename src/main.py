@@ -12,18 +12,12 @@ from src.agente.ollama_client import OllamaModelClient, OllamaModelError
 from src.agente.registro_metricas import registrar_execucao
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Agente inteligente local MySQL")
-    parser.add_argument("--arquivo", help="Arquivo com uma requisição JSON")
-    args = parser.parse_args()
+def processar(requisicao, notificar):
+    """Executa uma entrada já validada e registra as métricas da sessão."""
     banco = DatabaseClient()
     try:
-        # Rejeita JSON fora do contrato ANTES de iniciar Ollama ou MySQL.
-        requisicao = (
-            receber_arquivo_json(args.arquivo)
-            if args.arquivo is not None else receber_json()
-        )
         config = OllamaConfig.from_environment()
+        notificar(f"Verificação do modelo Ollama · {config.model}")
         modelo = OllamaModelClient(config)
         disponiveis = modelo.check_connection()
         if config.model not in disponiveis:
@@ -31,23 +25,55 @@ def main() -> None:
                 f"Modelo não encontrado entre os modelos instalados: {config.model}"
             )
 
-        print(f"Modelo local: {config.model}")
+        nome_banco = os.getenv("MYSQL_DATABASE", "agente_experimental")
+        notificar(f"Conexão com o banco · {nome_banco}")
         banco.connect()
-        print("Conexão com MySQL estabelecida.")
+        notificar(f"Descoberta da estrutura · conectado a {nome_banco}")
         estrutura = banco.get_database_structure()
-        print(
-            f"Estrutura carregada: {len(estrutura['tabelas'])} tabelas e "
-            f"{len(estrutura['relacionamentos'])} relacionamentos."
-        )
-
-        print("\nInterpretando requisição e gerando consulta SQL...")
+        notificar(f"Estrutura carregada · {len(estrutura['tabelas'])} tabelas e "
+                  f"{len(estrutura['relacionamentos'])} relacionamentos")
         resposta = _executar_requisicao_validada(
             requisicao=requisicao,
             estrutura=estrutura,
             modelo=modelo,
-            banco=banco,
+            banco=banco, notificar=notificar,
         )
 
+        try:
+            destino = registrar_execucao(
+                resposta,
+                modelo=config.model,
+                cenario=os.getenv("AGENTE_CENARIO_ID", "manual"),
+            )
+            aviso = f"Métricas registradas em: {destino}"
+        except (OSError, ValueError, TypeError) as erro:
+            aviso = f"Aviso: não foi possível registrar métricas: {erro}"
+
+        return resposta, aviso
+    finally:
+        banco.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Agente inteligente local MySQL")
+    parser.add_argument("--arquivo", help="Arquivo com uma requisição JSON")
+    parser.add_argument("--cli", action="store_true", help="Usar a interface de terminal")
+    args = parser.parse_args()
+    if not args.cli and args.arquivo is None:
+        try:
+            from src.interface.janelas import abrir
+        except ImportError as erro:
+            if erro.name not in {"tkinter", "_tkinter"}:
+                raise
+            parser.exit(1, "Tkinter indisponível. Instale o suporte Tk do Python ou utilize --cli.\n")
+        abrir(processar)
+        return
+    try:
+        requisicao = (
+            receber_arquivo_json(args.arquivo)
+            if args.arquivo is not None else receber_json()
+        )
+        resposta, aviso = processar(requisicao, print)
         print("\n" + "=" * 50)
         print("INTERPRETAÇÃO DO AGENTE")
         print("=" * 50)
@@ -91,20 +117,9 @@ def main() -> None:
             if valor is not None:
                 print(f"{rotulo}: {valor}")
 
-        try:
-            destino = registrar_execucao(
-                resposta,
-                modelo=config.model,
-                cenario=os.getenv("AGENTE_CENARIO_ID", "manual"),
-            )
-            print(f"\nMétricas registradas em: {destino}")
-        except (OSError, ValueError, TypeError) as erro:
-            print(f"\nAviso: não foi possível registrar métricas: {erro}")
-
+        print(aviso)
     except (OllamaModelError, ValueError, RuntimeError) as erro:
         print(f"\nErro: {erro}")
-    finally:
-        banco.close()
 
 
 if __name__ == "__main__":

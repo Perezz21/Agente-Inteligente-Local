@@ -29,7 +29,7 @@ def _validar_papel_identificador(pedido, tabela, coluna, dados_tabela):
                          + ", ".join(f"{tabela}.{c}" for c in opcoes))
 
 
-def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> dict:
+def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict, *, notificar=None) -> dict:
     """Devolve uma cópia canônica ou um diagnóstico para a próxima tentativa."""
     tabelas = estrutura.get("tabelas", {})
     if not tabelas:
@@ -185,6 +185,8 @@ def resolver_mapeamento(candidato: dict, requisicao: dict, estrutura: dict) -> d
 
     if pendentes:
         raise ValueError(f"Filtros solicitados ausentes: {sorted(pendentes)}.")
+    if notificar:
+        notificar("Planejamento dos relacionamentos")
     usadas, relacoes = planejar_relacoes(necessarias, candidato["relacionamentos_necessarios"],
                                           estrutura, requisicao)
     return {**candidato, "campos_solicitados": projecoes, "filtros": filtros,
