@@ -1,9 +1,9 @@
 # Interface do Agente Inteligente Local
 
-Capturas das janelas Tk em uma sessão gráfica Linux. A demonstração usou uma
-base SQLite temporária e respostas controladas do modelo para exercitar o fluxo
-do agente. Os tempos pertencem à execução de demonstração. As medições que o
-modelo de teste não fornece aparecem com um traço.
+Capturas da interface Tk no Windows, em uma janela de 1152 × 720. Os resultados
+usam respostas controladas do cenário de demonstração; os tempos e registros
+ilustram a apresentação visual e não representam uma consulta em produção.
+A comparação mostra a versão anterior à esquerda e a nova identidade à direita.
 
 | Requisição | Processamento |
 |---|---|
@@ -13,9 +13,17 @@ modelo de teste não fornece aparecem com um traço.
 |---|---|
 | [![SQL e parâmetros](sql.png)](sql.png) | [![Tabela de resultados](registros.png)](registros.png) |
 
-| Interpretação | Métricas |
+| Interpretação | Relacionamentos |
 |---|---|
-| [![Resumo da interpretação](interpretacao.png)](interpretacao.png) | [![Tempos por etapa](metricas.png)](metricas.png) |
+| [![Cards da interpretação](interpretacao.png)](interpretacao.png) | [![Grafo dinâmico de tabelas e chaves estrangeiras](relacionamentos.png)](relacionamentos.png) |
+
+| Métricas |
+|---|
+| [![Tempos acumulados e da última interpretação](metricas.png)](metricas.png) |
+
+## Comparação visual
+
+[![Antes e depois da interface](comparacao.png)](comparacao.png)
 
 O editor preserva a requisição quando uma etapa falha e indica a posição dos
-erros de sintaxe. [Abrir captura do erro de validação](erro.png)
+erros de sintaxe. [Abrir captura do alerta de validação](erro.png)

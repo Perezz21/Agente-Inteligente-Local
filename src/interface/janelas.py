@@ -17,8 +17,9 @@ from src.agente.config import OllamaConfig
 from src.agente.entrada import interpretar_json
 
 
-from src.interface.visual import (FUNDO, PAINEL, BORDA, TEXTO, SUAVE, DESTAQUE, ERRO, ESPACO,
-                                  painel, rotulo, indicador, cabecalho, estilo, icone_ambiente)
+from src.interface.visual import (PAINEL, EDITOR, TEXTO, SUAVE, DESTAQUE, ERRO,
+                                  painel, rotulo, indicador, cabecalho, estilo,
+                                  icone_ambiente, truncar, dica)
 
 CLAUSULAS = {"FROM", "WHERE", "GROUP_BY", "ORDER_BY", "LIMIT", "HAVING",
              "JOIN", "LEFT", "RIGHT", "INNER", "CROSS", "AND", "ON"}
@@ -61,9 +62,11 @@ def _area(pai, numerar=False, json_editor=False):
     quadro.pack(fill="both", expand=True)
     quadro.rowconfigure(0, weight=1)
     quadro.columnconfigure(1, weight=1)
-    texto = tk.Text(quadro, bg=PAINEL, fg=TEXTO, insertbackground=DESTAQUE, selectbackground="#315569",
-                    font="TkFixedFont", wrap="none", borderwidth=0, padx=12, pady=10,
-                    width=1, height=2, undo=numerar)
+    texto = tk.Text(quadro, bg=EDITOR, fg=TEXTO, insertbackground=DESTAQUE,
+                    selectbackground="#624033", selectforeground=TEXTO,
+                    font="TkFixedFont", wrap="none", borderwidth=0, padx=14, pady=12,
+                    width=1, height=2, undo=numerar, highlightthickness=1,
+                    highlightbackground=EDITOR, highlightcolor=DESTAQUE)
     texto.grid(row=0, column=1, sticky="nsew")
     vertical = ttk.Scrollbar(quadro, command=texto.yview)
     horizontal = ttk.Scrollbar(quadro, orient="horizontal", command=texto.xview)
@@ -71,7 +74,7 @@ def _area(pai, numerar=False, json_editor=False):
     horizontal.grid(row=1, column=1, sticky="ew")
     texto.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
     if numerar:
-        margem = tk.Canvas(quadro, width=54, bg=FUNDO, highlightthickness=0)
+        margem = tk.Canvas(quadro, width=48, bg=EDITOR, highlightthickness=0)
         margem.grid(row=0, column=0, sticky="ns")
 
         def desenhar(*_):
@@ -80,7 +83,7 @@ def _area(pai, numerar=False, json_editor=False):
             margem.delete("all")
             linha = int(texto.index("@0,0").split(".")[0])
             while (info := texto.dlineinfo(f"{linha}.0")) is not None:
-                margem.create_text(48, info[1], text=str(linha), anchor="ne", fill=SUAVE, font="TkFixedFont")
+                margem.create_text(40, info[1], text=str(linha), anchor="ne", fill="#887F7A", font="TkFixedFont")
                 linha += 1
                 if linha > int(texto.index("end-1c").split(".")[0]):
                     break
@@ -159,7 +162,7 @@ class Aplicacao:
         estilo(raiz)
         self.quadro = ttk.Frame(raiz, padding=(24, 18))
         self.quadro.pack(fill="both", expand=True)
-        cabecalho(self.quadro, "Agente Inteligente Local", "Assistente inteligente de consultas SQL")
+        cabecalho(self.quadro, "Agente Inteligente Local", "Inteligência aplicada a bancos de dados")
         self.estado = tk.StringVar(value="Pronto para editar")
         rodape = ttk.Frame(self.quadro)
         rodape.pack(side="bottom", fill="x", pady=(12, 0))
@@ -183,9 +186,13 @@ class Aplicacao:
             cartao.pack(fill="x", pady=(0, 15))
             icone_ambiente(cartao, nome).pack(side="left", anchor="n", padx=(0, 9))
             rotulo(cartao, nome, "Legenda").pack(anchor="w")
-            rotulo(cartao, valor or "", "Sucesso" if nome == "Acesso do agente" else "Secao",
-                   **({"textvariable": self.conexao} if valor is None else {}),
-                   wraplength=178).pack(anchor="w", pady=(3, 0))
+            texto_valor = truncar(valor or "", 20)
+            detalhe = rotulo(cartao, texto_valor, "Sucesso" if nome == "Acesso do agente" else "Secao",
+                             **({"textvariable": self.conexao} if valor is None else {}), anchor="w")
+            detalhe.configure(width=20)
+            detalhe.pack(anchor="w", pady=(3, 0))
+            if valor:
+                dica(detalhe, str(valor))
         self.centro = ttk.Frame(corpo)
         self.centro.pack(fill="both", expand=True)
         self.ambiente_btn = ttk.Button(rodape, text="Ambiente", command=self.alternar_ambiente)
@@ -212,9 +219,9 @@ class Aplicacao:
         barra.pack(fill="x", pady=(0, 8))
         for nome, funcao in [("Importar JSON", self.importar), ("Formatar", self.formatar),
                              ("Validar JSON", self.validar), ("Limpar", self.limpar)]:
-            self.botao(barra, nome, funcao).pack(side="left", padx=(0, 5))
+            self.botao(barra, nome, funcao, terciario=nome == "Limpar").pack(side="left", padx=(0, 8))
         self.editor = _area(self.entrada, True, json_editor=True)
-        for tag, cor in [("chave", DESTAQUE), ("valor", TEXTO), ("numero", "#B7C8ED")]:
+        for tag, cor in [("chave", "#F59A62"), ("valor", TEXTO), ("numero", "#D7B4E8")]:
             self.editor.tag_configure(tag, foreground=cor)
         self.editor.tag_configure("falha", underline=True, foreground=ERRO)
         self.editor.bind("<Return>", indentar)
@@ -244,8 +251,9 @@ class Aplicacao:
         else:
             self.lateral.pack(side="right", before=self.centro, fill="y", padx=(12, 0))
 
-    def botao(self, pai, nome, funcao, principal=False):
-        b = ttk.Button(pai, text=nome, command=funcao, style="Executar.TButton" if principal else "TButton")
+    def botao(self, pai, nome, funcao, principal=False, terciario=False):
+        estilo_botao = "Executar.TButton" if principal else "Terciario.TButton" if terciario else "TButton"
+        b = ttk.Button(pai, text=nome, command=funcao, style=estilo_botao)
         self.botoes.append(b)
         return b
 
@@ -259,17 +267,25 @@ class Aplicacao:
         self.limpar_erro()
         self.erro = painel(self.centro)
         self.erro.pack(before=self.entrada, fill="x", pady=(0, 8))
-        rotulo(self.erro, f"Falha · {ETAPAS[etapa]}", "Erro").pack(anchor="w")
-        rotulo(self.erro, descricao, wraplength=470).pack(anchor="w", pady=3)
-        detalhes = rotulo(self.erro, tecnico, wraplength=470)
+        aviso = tk.Canvas(self.erro, width=24, height=24, bg=PAINEL, highlightthickness=0)
+        aviso.pack(side="left", anchor="n", padx=(0, 10))
+        aviso.create_oval(3, 3, 21, 21, outline=ERRO, width=1.5)
+        aviso.create_line(12, 7, 12, 13, fill=ERRO, width=2, capstyle="round")
+        aviso.create_oval(11, 16, 13, 18, fill=ERRO, outline="")
+        conteudo = tk.Frame(self.erro, bg=PAINEL)
+        conteudo.pack(side="left", fill="x", expand=True)
+        rotulo(conteudo, f"Falha · {ETAPAS[etapa]}", "Erro").pack(anchor="w")
+        rotulo(conteudo, descricao, wraplength=650, justify="left").pack(anchor="w", pady=3)
+        detalhes = rotulo(conteudo, tecnico, "Tecnico", wraplength=650, justify="left")
         def alternar():
             if detalhes.winfo_manager():
                 detalhes.pack_forget()
             else:
                 detalhes.pack(anchor="w")
-        acoes = tk.Frame(self.erro, bg=PAINEL)
-        acoes.pack(anchor="w")
-        ttk.Button(acoes, text="Detalhes técnicos", command=alternar).pack(side="left")
+        acoes = tk.Frame(conteudo, bg=PAINEL)
+        acoes.pack(anchor="w", pady=(4, 0))
+        ttk.Button(acoes, text="Detalhes técnicos", command=alternar,
+                   style="Terciario.TButton").pack(side="left")
         def corrigir():
             self.limpar_erro()
             self.editor.focus_set()
@@ -420,7 +436,7 @@ class Aplicacao:
             ("Tentativas de interpretação", m.get("tentativas_interpretacao")), ("Tentativas SQL", m.get("tentativas_sql"))
         ]):
             cards.columnconfigure(i, weight=1, uniform="resumo")
-            caixa, _ = indicador(cards, titulo, "—" if valor is None else str(valor))
+            caixa, _ = indicador(cards, titulo, "Não disponível" if valor is None else str(valor))
             caixa.grid(row=0, column=i, sticky="nsew", padx=(0, 8) if i < 3 else 0)
         rodape = ttk.Frame(quadro)
         rodape.pack(side="bottom", fill="x", pady=(10, 0))

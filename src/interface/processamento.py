@@ -3,7 +3,7 @@ from time import monotonic
 import tkinter as tk
 from tkinter import ttk
 
-from src.interface.visual import SUAVE, DESTAQUE, ERRO, TEXTO, painel, rotulo
+from src.interface.visual import SUAVE, DESTAQUE, ERRO, SUCESSO, PAINEL, EDITOR, painel, rotulo
 
 ETAPAS = ("Validação da requisição", "Verificação do modelo local", "Conexão com o banco de dados",
           "Descoberta da estrutura", "Interpretação semântica", "Planejamento dos relacionamentos",
@@ -27,62 +27,104 @@ ORIENTACOES = (
 class Progresso:
     def __init__(self, pai):
         self.caixa = painel(pai)
-        topo = tk.Frame(self.caixa, bg=self.caixa["bg"])
+        topo = tk.Frame(self.caixa, bg=PAINEL)
         topo.pack(fill="x")
         rotulo(topo, "Processamento da consulta", "Secao").pack(side="left")
-        self.tempo = rotulo(topo, "", "Valor")
+        cronometro = tk.Frame(topo, bg=EDITOR, padx=12, pady=6)
+        cronometro.pack(side="right")
+        rotulo(cronometro, "TEMPO REAL", "Legenda", background=EDITOR).pack(side="left", padx=(0, 10))
+        self.tempo = ttk.Label(cronometro, text="00:00", style="Valor.TLabel", background=EDITOR)
         self.tempo.pack(side="right")
         self.atividade = ttk.Progressbar(self.caixa, mode="indeterminate", length=180)
-        self.atividade.pack(fill="x", pady=(10, 12))
-        self.estados = []
-        self.pontos = []
+        self.atividade.pack(fill="x", pady=(14, 16))
+        self.estados, self.pontos = [], []
         for nome in ETAPAS:
-            linha = tk.Frame(self.caixa, bg=self.caixa["bg"])
-            linha.pack(fill="x", pady=4)
-            ponto = tk.Canvas(linha, width=18, height=18, bg=self.caixa["bg"], highlightthickness=0)
-            ponto.pack(side="left", padx=(0, 8))
-            ponto.create_oval(4, 4, 13, 13, outline=SUAVE, tags="estado")
+            linha = tk.Frame(self.caixa, bg=PAINEL)
+            linha.pack(fill="x", pady=5)
+            ponto = tk.Canvas(linha, width=22, height=22, bg=PAINEL, highlightthickness=0)
+            ponto.pack(side="left", padx=(0, 10))
+            ponto.create_oval(4, 4, 18, 18, outline=SUAVE, width=1.3, tags="anel")
+            ponto.create_line(7, 11, 10, 14, 15, 8, fill=SUCESSO, width=2,
+                              capstyle="round", joinstyle="round", state="hidden", tags="marca")
+            ponto.create_arc(3, 3, 19, 19, start=30, extent=250, style="arc",
+                             outline=DESTAQUE, width=2, state="hidden", tags="giro")
             self.pontos.append(ponto)
             rotulo(linha, nome).pack(side="left")
             estado = rotulo(linha, "Pendente", "Legenda")
             estado.pack(side="right")
             self.estados.append(estado)
-        self.atual = 0
+        self.atual, self.inicio, self.giro, self.spinner_job = 0, None, 30, None
 
     def iniciar(self):
+        self.parar_spinner()
         self.inicio = monotonic()
-        for e, ponto in zip(self.estados, self.pontos):
-            e.configure(text="Pendente", foreground=SUAVE)
-            ponto.itemconfigure("estado", fill="", outline=SUAVE)
+        self.tempo.configure(text="00:00")
+        for estado, ponto in zip(self.estados, self.pontos):
+            estado.configure(text="Pendente", foreground=SUAVE)
+            ponto.itemconfigure("anel", outline=SUAVE, fill="")
+            ponto.itemconfigure("marca", state="hidden")
+            ponto.itemconfigure("giro", state="hidden")
         self.atual = 0
         self.entrar(0)
         self.atividade.start(24)
         self.relogio()
 
     def relogio(self):
-        segundos = int(monotonic()-self.inicio)
-        self.tempo.configure(text=f"{segundos//60:02}:{segundos%60:02}")
+        if self.inicio is None:
+            return
+        segundos = int(monotonic() - self.inicio)
+        self.tempo.configure(text=f"{segundos // 60:02}:{segundos % 60:02}")
+
+    def animar(self):
+        self.spinner_job = None
+        if self.inicio is None:
+            return
+        self.giro = (self.giro + 30) % 360
+        self.pontos[self.atual].itemconfigure("giro", start=self.giro)
+        self.spinner_job = self.pontos[self.atual].after(90, self.animar)
+
+    def parar_spinner(self):
+        if self.spinner_job:
+            try:
+                self.pontos[self.atual].after_cancel(self.spinner_job)
+            except tk.TclError:
+                pass
+            self.spinner_job = None
 
     def entrar(self, indice):
+        self.parar_spinner()
         self.concluir_etapa()
         self.atual = indice
         self.estados[indice].configure(text="Em processamento", foreground=DESTAQUE)
-        self.pontos[indice].itemconfigure("estado", fill=DESTAQUE, outline=DESTAQUE)
-        # Uma nova interpretação invalida o planejamento da tentativa anterior.
+        self.pontos[indice].itemconfigure("anel", outline=DESTAQUE)
+        self.pontos[indice].itemconfigure("giro", state="normal", start=self.giro)
+        self.animar()
         if indice == 4:
             self.estados[5].configure(text="Pendente", foreground=SUAVE)
-            self.pontos[5].itemconfigure("estado", fill="", outline=SUAVE)
+            self.pontos[5].itemconfigure("anel", outline=SUAVE, fill="")
+            self.pontos[5].itemconfigure("marca", state="hidden")
 
     def concluir_etapa(self):
-        self.estados[self.atual].configure(text="Concluída", foreground=TEXTO)
-        self.pontos[self.atual].itemconfigure("estado", fill=SUAVE, outline=SUAVE)
+        if self.estados[self.atual].cget("text") == "Pendente":
+            return
+        self.estados[self.atual].configure(text="Concluída", foreground=SUCESSO)
+        ponto = self.pontos[self.atual]
+        ponto.itemconfigure("anel", outline=SUCESSO, fill=SUCESSO)
+        ponto.itemconfigure("marca", state="normal")
+        ponto.itemconfigure("giro", state="hidden")
 
     def finalizar(self, sucesso):
         self.atividade.stop()
         self.relogio()
+        self.parar_spinner()
+        self.inicio = None
         if sucesso:
             self.entrar(8)
+            self.parar_spinner()
             self.concluir_etapa()
         else:
             self.estados[self.atual].configure(text="Falha", foreground=ERRO)
-            self.pontos[self.atual].itemconfigure("estado", fill=ERRO, outline=ERRO)
+            ponto = self.pontos[self.atual]
+            ponto.itemconfigure("anel", fill=ERRO, outline=ERRO)
+            ponto.itemconfigure("giro", state="hidden")
+            ponto.itemconfigure("marca", state="hidden")

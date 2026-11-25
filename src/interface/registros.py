@@ -9,7 +9,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, font, ttk
 
-from src.interface.visual import FUNDO, PAINEL
+from src.interface.visual import FUNDO, EDITOR, PAINEL
 
 
 def selecionar(registros, busca, coluna=None, reversa=False):
@@ -64,8 +64,8 @@ class Tabela:
         self.nomes = list(registros[0]) if registros else []
         barra = ttk.Frame(pai)
         barra.pack(fill="x", pady=(0, 8))
-        ttk.Label(barra, text="Pesquisar registros").pack(side="left")
-        ttk.Entry(barra, textvariable=self.busca, width=24).pack(side="left", padx=8)
+        ttk.Label(barra, text="Pesquisar registros", style="Suave.TLabel").pack(side="left")
+        ttk.Entry(barra, textvariable=self.busca, width=28).pack(side="left", padx=(10, 12))
         self.info = ttk.Label(barra, style="Suave.TLabel")
         self.info.pack(side="right")
         quadro = ttk.Frame(pai)
@@ -83,14 +83,15 @@ class Tabela:
             self.grade.column(idx, anchor="e" if numerica else "w", width=max(100, min(400, largura+36)), minwidth=55)
             self.grade.heading(idx, text=nome, command=lambda n=nome: self.ordenar(n))
         self.grade.tag_configure("par", background=PAINEL)
-        self.grade.tag_configure("impar", background=FUNDO)
+        self.grade.tag_configure("impar", background=EDITOR)
         for eixo, orient, row, col, sticky in [("y", "vertical", 0, 1, "ns"), ("x", "horizontal", 1, 0, "ew")]:
             scroll = ttk.Scrollbar(quadro, orient=orient, command=getattr(self.grade, eixo+"view"))
             scroll.grid(row=row, column=col, sticky=sticky)
             self.grade.configure(**{eixo+"scrollcommand": scroll.set})
         rodape = ttk.Frame(pai)
         rodape.pack(fill="x", pady=(8, 0))
-        self.ant = ttk.Button(rodape, text="Anterior", command=lambda: self.mostrar(self.inicio-100))
+        self.ant = ttk.Button(rodape, text="Anterior", command=lambda: self.mostrar(self.inicio-100),
+                              style="Terciario.TButton")
         self.prox = ttk.Button(rodape, text="Próxima", command=lambda: self.mostrar(self.inicio+100))
         self.prox.pack(side="right")
         self.ant.pack(side="right", padx=6)
