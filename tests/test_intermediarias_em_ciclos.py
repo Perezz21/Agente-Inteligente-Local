@@ -37,7 +37,7 @@ class IntermediariasEmCiclos(unittest.TestCase):
                         "estoque": tabela("id", "produto_id", "loja_id"), "loja": tabela("id")},
             "relacionamentos": self.caminho + self.desvio,
         }
-        self.r = {"versao": "1.0", "entidade": "itens de pedido",
+        self.r = {"entidade": "itens de pedido",
                   "campos": ["nome do produto", "quantidade total comprada"],
                   "filtros": {"nome do cliente": "Ana"}, "agrupamento": ["produto.nome"],
                   "agregacoes": [{"funcao": "SUM", "campo": "item_pedido.quantidade"}]}

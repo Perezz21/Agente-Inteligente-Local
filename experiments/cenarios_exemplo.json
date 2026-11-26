@@ -2,7 +2,6 @@
   {
     "id": "cenario_01",
     "requisicao": {
-      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "data da medição",

@@ -13,7 +13,7 @@ from src import main
 from src.agente.registro_metricas import registrar_execucao
 
 
-PEDIDO = {"versao": "1.0", "entidade": "amostra", "campos": ["amostra.nome"],
+PEDIDO = {"entidade": "amostra", "campos": ["amostra.nome"],
           "filtros": {"amostra.id": 1}, "agrupamento": [], "agregacoes": []}
 PLANO = {"status": "sucesso", "observacoes": "", "tabelas_identificadas": ["amostra"],
          "campos_solicitados": ["amostra.nome"], "relacionamentos_necessarios": [],
@@ -131,12 +131,21 @@ class JanelasTk(unittest.TestCase):
         self.app.editor.insert("1.0", json.dumps(PEDIDO))
         self.assertEqual(self.app.validar(), PEDIDO)
         self.raiz.update()
-        self.assertIn('\n  "versao"', self.app.editor.get("1.0", "end-1c"))
+        self.assertIn('\n  "entidade"', self.app.editor.get("1.0", "end-1c"))
         margem = next(c for c in self.widgets(self.app.editor.master, self.ui.tk.Canvas)
                       if c.master is self.app.editor.master)
         self.assertGreater(len(margem.find_all()), 1)
         self.app.limpar()
         self.assertEqual(self.app.editor.get("1.0", "end-1c"), "")
+
+    def test_editor_recusa_campo_versao_antes_da_execucao(self):
+        self.app.trocar_texto(json.dumps(dict(PEDIDO, versao="1.0")))
+        self.app.executar()
+        self.servico.assert_not_called()
+        mensagens = [w.cget("text") for w in self.widgets(self.app.erro, self.ui.ttk.Label)]
+        self.assertIn("Remova a propriedade 'versao' da requisição.", mensagens)
+        self.app.trocar_texto(json.dumps(PEDIDO))
+        self.assertEqual(self.app.validar(), PEDIDO)
 
     def test_thread_abas_copia_e_nova_consulta(self):
         liberar = threading.Event()

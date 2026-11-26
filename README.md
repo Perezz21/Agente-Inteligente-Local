@@ -8,16 +8,15 @@ O objetivo é desenvolver um agente local em Python que recebe requisições est
 
 O agente **não possui um modelo de tabelas específico fixado no código**.
 Ele consulta o esquema do banco MySQL configurado em tempo de execução e
-interpreta uma requisição estruturada pelo contrato genérico v1.0.
+interpreta uma requisição estruturada pelo contrato genérico.
 
 O contrato fica no arquivo
-[`schemas/requisicao_v1.schema.json`](schemas/requisicao_v1.schema.json)
+[`schemas/requisicao.schema.json`](schemas/requisicao.schema.json)
 e é documentado em
-[`docs/contrato_requisicao_v1.md`](docs/contrato_requisicao_v1.md).
+[`docs/contrato_requisicao.md`](docs/contrato_requisicao.md).
 
 ```json
 {
-  "versao": "1.0",
   "entidade": "filmes",
   "campos": ["título do filme"],
   "filtros": {},
@@ -107,7 +106,7 @@ python -m src.main
 ```
 
 Na janela, preencha o modelo de requisição ou importe um JSON com **Ctrl+O**.
-**Validar** confere o contrato v1.0. **Ctrl+Enter** executa a consulta.
+**Validar** confere o contrato. **Ctrl+Enter** executa a consulta.
 Durante a execução, a tela identifica a etapa em andamento e mostra o tempo decorrido.
 
 Na janela de resultados, **Voltar à requisição** recupera o último pedido para edição.

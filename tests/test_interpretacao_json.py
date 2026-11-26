@@ -46,7 +46,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         banco = Mock()
         banco.execute_select.return_value = [{"titulo": "Filme A"}]
         resultado = executar_requisicao(
-            {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+            {"filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
             {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
             modelo, banco
@@ -67,7 +67,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         banco = Mock()
         with self.assertRaisesRegex(ValueError, "JSON válido"):
             executar_requisicao(
-                {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+                {"filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
                 {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
                 modelo, banco,
@@ -82,7 +82,7 @@ class TesteInterpretacaoEstruturada(unittest.TestCase):
         }))
         with self.assertRaisesRegex(ValueError, "Tipos inválidos"):
             executar_requisicao(
-                {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+                {"filtros": {}, "agrupamento": [], "agregacoes": [],
                  "entidade": "filmes", "campos": ["título"]},
                 {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []},
                 modelo, Mock(),

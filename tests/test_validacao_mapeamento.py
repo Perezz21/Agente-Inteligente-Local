@@ -23,7 +23,7 @@ ESTRUTURA = {
     "relacionamentos": [],
 }
 REQUISICAO = {
-    "versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+    "filtros": {}, "agrupamento": [], "agregacoes": [],
     "entidade": "filmes", "campos": ["título do filme"]}
 
 

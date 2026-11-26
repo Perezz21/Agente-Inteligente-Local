@@ -1,12 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Contrato de requisição do Agente Inteligente Local v1.0",
+  "title": "Contrato de requisição do Agente Inteligente Local",
   "description": "Define a estrutura de entrada sem fixar tabelas nem colunas de um banco de dados.",
   "type": "object",
   "properties": {
-    "versao": {
-      "const": "1.0"
-    },
     "entidade": {
       "type": "string",
       "pattern": "\\S"
@@ -69,7 +66,6 @@
     }
   },
   "required": [
-    "versao",
     "entidade",
     "campos",
     "filtros",

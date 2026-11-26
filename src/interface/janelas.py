@@ -123,7 +123,7 @@ def _json(valor):
     return json.dumps(valor, ensure_ascii=False, indent=2, default=str)
 
 
-MODELO = {"versao": "1.0", "entidade": "<entidade>", "campos": ["<campo solicitado>"],
+MODELO = {"entidade": "<entidade>", "campos": ["<campo solicitado>"],
           "filtros": {}, "agrupamento": [], "agregacoes": []}
 
 JSON_TOKENS = re.compile(r'("(?:\\.|[^"\\])*")\s*(:)?|\b(?:true|false|null|-?\d+(?:\.\d+)?)\b')
@@ -209,7 +209,7 @@ class Aplicacao:
         rotulo(topo, "Nova consulta", "Secao").pack(side="left")
         icone(topo, "seguro", tamanho=16).pack(side="left", padx=(16, 5))
         rotulo(topo, "Somente leitura").pack(side="left")
-        rotulo(self.entrada.conteudo, "Cole uma requisição JSON v1.0 ou substitua os campos entre < >.").pack(anchor="w", pady=(2, 8))
+        rotulo(self.entrada.conteudo, "Cole uma requisição JSON ou substitua os campos entre < >.").pack(anchor="w", pady=(2, 8))
         barra = tk.Frame(self.entrada.conteudo, bg=PAINEL)
         barra.pack(fill="x", pady=(0, 8))
         for nome, funcao, simbolo in [("Importar JSON", self.importar, "importar"), ("Formatar", self.formatar, "codigo"),
@@ -327,10 +327,12 @@ class Aplicacao:
             dados = json.loads(bruto)
             faltam = [k for k in MODELO if isinstance(dados, dict) and k not in dados]
             descricao = ("Preencha: " + ", ".join(faltam) + ".") if faltam else ORIENTACOES[0]
-            self.exibir_erro(0, descricao, "Contrato v1.0 · " + type(exc).__name__)
+            if isinstance(dados, dict) and "versao" in dados:
+                descricao = "Remova a propriedade 'versao' da requisição."
+            self.exibir_erro(0, descricao, "Contrato · " + type(exc).__name__)
             return None
         self.trocar_texto(_json(pedido))
-        self.estado.set("JSON formatado." if apenas_formatar else "JSON válido pelo contrato v1.0.")
+        self.estado.set("JSON formatado." if apenas_formatar else "JSON válido pelo contrato.")
         return pedido
 
     def formatar(self):

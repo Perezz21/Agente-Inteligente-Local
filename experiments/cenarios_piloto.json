@@ -2,7 +2,6 @@
   {
     "id": "cenario_01",
     "requisicao": {
-      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "data da medição",
@@ -48,7 +47,6 @@
   {
     "id": "cenario_02",
     "requisicao": {
-      "versao": "1.0",
       "entidade": "medições",
       "campos": [
         "nome do rio",
@@ -88,7 +86,6 @@
   {
     "id": "cenario_03",
     "requisicao": {
-      "versao": "1.0",
       "entidade": "rios",
       "campos": [
         "nome do rio",
@@ -115,7 +112,6 @@
   {
     "id": "cenario_04",
     "requisicao": {
-      "versao": "1.0",
       "entidade": "indicadores",
       "campos": [
         "nome do indicador",

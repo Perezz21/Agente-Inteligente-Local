@@ -10,7 +10,7 @@ from src.executar_experimentos import carregar_cenarios, executar_cenarios
 
 
 PEDIDO = {
-    "versao": "1.0", "entidade": "medicoes", "campos": ["id"],
+    "entidade": "medicoes", "campos": ["id"],
     "filtros": {}, "agrupamento": [], "agregacoes": [],
 }
 

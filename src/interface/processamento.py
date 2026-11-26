@@ -12,7 +12,7 @@ EVENTOS = {"Verificação do modelo Ollama": 1, "Conexão com o banco": 2, "Desc
            "Interpretação da requisição": 4, "Planejamento dos relacionamentos": 5,
            "Geração e validação SQL": 6, "Execução da consulta": 7}
 ORIENTACOES = (
-    "Revise os seis campos obrigatórios e a sintaxe do JSON.",
+    "Revise os cinco campos obrigatórios e a sintaxe do JSON.",
     "Verifique se o Ollama está em execução e se o modelo configurado está instalado.",
     "Confira o serviço MySQL e as configurações locais de conexão.",
     "Verifique se a conta pode consultar os metadados do banco.",

@@ -1,20 +1,19 @@
-# Contrato obrigatório de entrada JSON v1.0
+# Contrato obrigatório de entrada JSON
 
 O agente recebe **uma requisição JSON estruturada**. O formato é independente do
 modelo de banco de dados: nenhuma tabela ou coluna do Sakila, do banco ambiental
 ou de outro banco é exigida no código para aceitar um pedido.
 
 A fonte única do padrão é
-[`schemas/requisicao_v1.schema.json`](../schemas/requisicao_v1.schema.json).
+[`schemas/requisicao.schema.json`](../schemas/requisicao.schema.json).
 A validação acontece em `src/agente/contrato_requisicao.py`, **antes de conectar
-ao Ollama ou ao MySQL**. Requisições com propriedades ausentes, extras, tipos
-incorretos ou versões não suportadas são recusadas.
+ao Ollama ou ao MySQL**. Requisições com propriedades ausentes, extras ou tipos
+incorretos são recusadas.
 
 ## Requisição válida
 
 ```json
 {
-  "versao": "1.0",
   "entidade": "filmes",
   "campos": ["título do filme"],
   "filtros": {},
@@ -23,12 +22,11 @@ incorretos ou versões não suportadas são recusadas.
 }
 ```
 
-As **seis propriedades são obrigatórias**, mesmo que `filtros`,
+As **cinco propriedades são obrigatórias**, mesmo que `filtros`,
 `agrupamento` e `agregacoes` estejam vazios.
 
 | Propriedade | Formato | O que informa |
 | --- | --- | --- |
-| `versao` | `"1.0"` | Versão do contrato, não do banco |
 | `entidade` | texto não vazio | Assunto da requisição em linguagem natural |
 | `campos` | lista não vazia de textos | Campos desejados descritos pelo usuário |
 | `filtros` | objeto com chaves livres e valores simples | Critérios de consulta; `{}` para todos os registros |
@@ -41,7 +39,7 @@ apenas verifica a estrutura. Em seguida, o agente descobre o banco conectado,
 interpreta os termos, gera SQL, valida e executa consultas somente de leitura.
 
 **Limitação atual:** `agrupamento` e `agregacoes[*].campo` ainda exigem
-referências físicas `tabela.coluna` no formato v1.0. Isso não fixa nenhum
+referências físicas `tabela.coluna`. Isso não fixa nenhum
 nome no código, mas exige que quem forneça essas operações conheça esses
 identificadores. Torná-los semânticos também é uma evolução planejada.
 
@@ -51,11 +49,10 @@ identificadores. Torná-los semânticos também é uma evolução planejada.
 {"entidade": "filmes", "campos": ["título do filme"]}
 ```
 
-Falta `versao` e faltam propriedades obrigatórias.
+Faltam `filtros`, `agrupamento` e `agregacoes`.
 
 ```json
 {
-  "versao": "1.0",
   "entidade": "filmes",
   "campos": ["título do filme"],
   "filtros": {},

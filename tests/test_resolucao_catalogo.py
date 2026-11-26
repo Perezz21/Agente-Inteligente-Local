@@ -36,7 +36,7 @@ CATALOGO = {
 
 
 def pedido(*campos, entidade="evento", filtros=None):
-    return {"versao": "1.0", "entidade": entidade, "campos": list(campos),
+    return {"entidade": entidade, "campos": list(campos),
             "filtros": filtros or {}, "agrupamento": [], "agregacoes": []}
 
 

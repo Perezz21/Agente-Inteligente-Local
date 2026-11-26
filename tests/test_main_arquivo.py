@@ -50,7 +50,7 @@ class TestePrincipalPorArquivo(unittest.TestCase):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "consulta.json"
             arquivo.write_text(
-                '{"versao":"1.0","entidade":"filmes","campos":["título do filme"],'
+                '{"entidade":"filmes","campos":["título do filme"],'
                 '"filtros":{},"agrupamento":[],"agregacoes":[]}' ,
                 encoding="utf-8",
             )
@@ -61,7 +61,7 @@ class TestePrincipalPorArquivo(unittest.TestCase):
         receber_json.assert_not_called()
         self.assertEqual(
             executar.call_args.kwargs["requisicao"],
-            {"versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+            {"filtros": {}, "agrupamento": [], "agregacoes": [],
              "entidade": "filmes", "campos": ["título do filme"]},
         )
         banco.close.assert_called_once()

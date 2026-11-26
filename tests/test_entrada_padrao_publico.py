@@ -12,7 +12,6 @@ from src.executar_experimentos import carregar_cenarios
 
 def requi():
     return {
-        "versao": "1.0",
         "entidade": "registros",
         "campos": ["nome"],
         "filtros": {},
@@ -26,7 +25,7 @@ class TesteEntradaPublicaEstrita(unittest.TestCase):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "legado.json"
             arquivo.write_text(
-                json.dumps({"entidade": "registros", "campos": ["nome"]}),
+                json.dumps(dict(requi(), versao="1.0")),
                 encoding="utf-8",
             )
             with (
@@ -41,12 +40,10 @@ class TesteEntradaPublicaEstrita(unittest.TestCase):
                 banco.return_value.connect.assert_not_called()
                 modelo.assert_not_called()
                 config.from_environment.assert_not_called()
-                saida.assert_any_call(
-                    "\nErro: JSON fora do padrão: propriedade obrigatória 'versao' "
-                    "ausente. Utilize o contrato JSON v1.0."
-                )
+                self.assertIn("fora do padrão", str(saida.call_args))
+                self.assertIn("versao", str(saida.call_args))
 
-    def test_02_entrada_interativa_aceita_json_v1(self):
+    def test_02_entrada_interativa_aceita_json_valido(self):
         linhas = json.dumps(requi(), ensure_ascii=False, indent=2).splitlines()
         with patch("builtins.input", side_effect=linhas + [""]):
             recebida = receber_json()
@@ -54,25 +51,25 @@ class TesteEntradaPublicaEstrita(unittest.TestCase):
 
     def test_03_entrada_interativa_recusa_legado(self):
         with patch("builtins.input", side_effect=[
-            '{"entidade":"registros","campos":["nome"]}', ""
+            json.dumps(dict(requi(), versao="1.0")), ""
         ]):
             with self.assertRaisesRegex(ValueError, "versao"):
                 receber_json()
 
-    def test_04_cenario_externo_recusa_requisicao_sem_versao(self):
+    def test_04_cenario_externo_recusa_requisicao_com_versao(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "cenarios.json"
             arquivo.write_text(
                 json.dumps([{
                     "id": "teste",
-                    "requisicao": {"entidade": "registros", "campos": ["nome"]},
+                    "requisicao": dict(requi(), versao="1.0"),
                 }]),
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "versao"):
                 carregar_cenarios(arquivo)
 
-    def test_05_cenario_externo_aceita_v1(self):
+    def test_05_cenario_externo_aceita_pedido_valido(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "cenarios.json"
             arquivo.write_text(

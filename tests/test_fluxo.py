@@ -10,7 +10,7 @@ from src.agente.sql_generator import SQLGenerationError
 
 
 REQUISICAO = {
-    "versao": "1.0", "filtros": {}, "agrupamento": [], "agregacoes": [],
+    "filtros": {}, "agrupamento": [], "agregacoes": [],
     "entidade": "medições", "campos": ["vazão"]}
 ESTRUTURA = {"tabelas": {"medicoes": {"colunas": [{"nome": "vazao_m3_s"}]}}, "relacionamentos": []}
 INTERPRETACAO = {

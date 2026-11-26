@@ -100,7 +100,7 @@ class RegistroPorEtapa(unittest.TestCase):
     @staticmethod
     def rodar(etapa, referenciado=True):
         segredo = "VALOR_PRIVADO_DA_RODADA"
-        r = {"versao": "1.0", "entidade": "amostra", "campos": ["amostra.valor"],
+        r = {"entidade": "amostra", "campos": ["amostra.valor"],
              "filtros": {"amostra.id": segredo}, "agrupamento": [], "agregacoes": []}
         i = {"status": "sucesso", "observacoes": "", "tabelas_identificadas": ["amostra"],
              "campos_solicitados": ["amostra.valor"], "relacionamentos_necessarios": [],

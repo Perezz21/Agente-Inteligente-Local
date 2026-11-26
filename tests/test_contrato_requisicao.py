@@ -1,4 +1,4 @@
-"""Testes do contrato JSON v1, incluindo compatibilidade e fluxo real mockado."""
+"""Testes do contrato JSON e da integração com o fluxo do agente."""
 
 import json
 import tempfile
@@ -8,16 +8,15 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.agente.contrato_requisicao import (
-    ESQUEMA_REQUISICAO_V1, normalizar_requisicao,
+    ESQUEMA_REQUISICAO, normalizar_requisicao,
 )
 from src.agente.entrada import receber_arquivo_json
 from src.agente.fluxo import executar_requisicao
 from src.executar_experimentos import carregar_cenarios
 
 
-def requisicao_v1():
+def pedido_valido():
     return {
-        "versao": "1.0",
         "entidade": "filmes",
         "campos": ["título do filme"],
         "filtros": {},
@@ -26,17 +25,17 @@ def requisicao_v1():
     }
 
 
-class TesteContratoRequisicaoV1(unittest.TestCase):
-    def test_01_normaliza_v1_sem_modificar_entrada(self):
-        original = requisicao_v1()
+class TesteContratoRequisicao(unittest.TestCase):
+    def test_01_normaliza_sem_modificar_entrada(self):
+        original = pedido_valido()
         normalizada = normalizar_requisicao(original)
         self.assertEqual(normalizada, {
             "entidade": "filmes", "campos": ["título do filme"]
         })
-        self.assertEqual(original, requisicao_v1())
+        self.assertEqual(original, pedido_valido())
 
     def test_02_rejeita_legado_tambem_na_chamada_direta(self):
-        antiga = {"entidade": "filmes", "campos": ["título do filme"]}
+        antiga = dict(pedido_valido(), versao="1.0")
         with self.assertRaisesRegex(ValueError, "versao"):
             normalizar_requisicao(antiga)
         modelo, banco = Mock(), Mock()
@@ -46,7 +45,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         banco.execute_select.assert_not_called()
 
     def test_03_valida_filtros_agrupamento_e_agregacoes(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["filtros"] = {"municipio": "Jataí", "ano": 2025}
         dados["campos"] = ["nome do município", "média da vazão"]
         dados["agrupamento"] = ["municipios.nome"]
@@ -59,20 +58,20 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         self.assertEqual(recebido["agregacoes"][0]["funcao"], "AVG")
         self.assertNotIn("versao", recebido)
 
-    def test_04_rejeita_versao_nao_suportada(self):
-        dados = requisicao_v1()
+    def test_04_rejeita_campo_versao(self):
+        dados = pedido_valido()
         dados["versao"] = "2.0"
-        with self.assertRaisesRegex(ValueError, "Versão"):
+        with self.assertRaisesRegex(ValueError, "versao"):
             normalizar_requisicao(dados)
 
     def test_05_rejeita_campos_obrigatorios_faltantes(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         del dados["agrupamento"]
         with self.assertRaisesRegex(ValueError, "fora do padrão"):
             normalizar_requisicao(dados)
 
     def test_06_rejeita_propriedades_extras(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["consulta_sql"] = "SELECT * FROM filme"
         with self.assertRaisesRegex(ValueError, "fora do padrão"):
             normalizar_requisicao(dados)
@@ -83,7 +82,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
             ("filmes", [""]), ("filmes", ["título", 10]),
         ]:
             with self.subTest(entidade=entidade, campos=campos):
-                dados = requisicao_v1()
+                dados = pedido_valido()
                 dados["entidade"] = entidade
                 dados["campos"] = campos
                 with self.assertRaises(ValueError):
@@ -95,25 +94,25 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
             {"municipio": None}, {"": "valor"}, {"ano": float("nan")},
         ]:
             with self.subTest(filtros=filtros):
-                dados = requisicao_v1()
+                dados = pedido_valido()
                 dados["filtros"] = filtros
                 with self.assertRaises(ValueError):
                     normalizar_requisicao(dados)
 
     def test_09_rejeita_agrupamento_sem_referencia_fisica(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["agrupamento"] = ["nome do município"]
         with self.assertRaisesRegex(ValueError, "agrupamento"):
             normalizar_requisicao(dados)
 
     def test_10_rejeita_agregacao_nao_suportada(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["agregacoes"] = [{"funcao": "MEDIAN", "campo": "medicoes.vazao_m3_s"}]
         with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
 
     def test_11_rejeita_agregacao_malformada(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["agregacoes"] = [{"funcao": "AVG", "campo": "vazao"}]
         with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
@@ -121,48 +120,48 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "agregacoes"):
             normalizar_requisicao(dados)
 
-    def test_12_schema_declara_seis_propriedades_obrigatorias(self):
+    def test_12_schema_declara_cinco_propriedades_obrigatorias(self):
         self.assertEqual(
-            set(ESQUEMA_REQUISICAO_V1["required"]),
-            set(requisicao_v1()),
+            set(ESQUEMA_REQUISICAO["required"]),
+            set(pedido_valido()),
         )
-        self.assertFalse(ESQUEMA_REQUISICAO_V1["additionalProperties"])
+        self.assertFalse(ESQUEMA_REQUISICAO["additionalProperties"])
 
-    def test_13_leitura_de_arquivo_json_v1(self):
+    def test_13_leitura_de_arquivo_json_valido(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "requisicao.json"
             arquivo.write_text(
-                json.dumps(requisicao_v1(), ensure_ascii=False),
+                json.dumps(pedido_valido(), ensure_ascii=False),
                 encoding="utf-8",
             )
             self.assertEqual(
-                receber_arquivo_json(arquivo), requisicao_v1(),
+                receber_arquivo_json(arquivo), pedido_valido(),
             )
 
-    def test_14_exemplo_versionado_do_repositorio(self):
+    def test_14_exemplo_do_repositorio(self):
         raiz = Path(__file__).resolve().parents[1]
         exemplo = raiz / "experiments" / "requisicao_sakila_filmes.json"
         dados = json.loads(exemplo.read_text(encoding="utf-8"))
-        self.assertEqual(dados, requisicao_v1())
+        self.assertEqual(dados, pedido_valido())
         self.assertEqual(
             normalizar_requisicao(dados)["campos"], ["título do filme"]
         )
 
-    def test_15_cenario_experimental_versionado(self):
+    def test_15_cenario_experimental_valido(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "cenarios.json"
             arquivo.write_text(
-                json.dumps([{"id": "v1", "requisicao": requisicao_v1()}]),
+                json.dumps([{"id": "exemplo", "requisicao": pedido_valido()}]),
                 encoding="utf-8",
             )
             cenarios = carregar_cenarios(arquivo)
         self.assertEqual(
-            cenarios[0]["requisicao"], requisicao_v1(),
+            cenarios[0]["requisicao"], pedido_valido(),
         )
 
     @patch("src.agente.fluxo.SQLGenerator")
     @patch("src.agente.fluxo.completar_interpretacao")
-    def test_16_fluxo_direto_normaliza_v1_antes_do_ollama(
+    def test_16_fluxo_direto_normaliza_antes_do_ollama(
         self, completar, gerador_cls
     ):
         interpretacao = {
@@ -189,7 +188,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         banco.execute_select.return_value = [{"titulo": "Filme A"}]
         estrutura = {"tabelas": {"filme": {"colunas": [{"nome": "titulo"}]}}, "relacionamentos": []}
         resposta = executar_requisicao(
-            requisicao_v1(), estrutura, modelo, banco
+            pedido_valido(), estrutura, modelo, banco
         )
         self.assertEqual(resposta["total_registros"], 1)
         completar.assert_called_once_with(
@@ -197,27 +196,27 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
             interpretacao, estrutura,
         )
 
-    def test_18_arquivo_externo_sem_versao_e_rejeitado(self):
+    def test_18_arquivo_externo_incompleto_e_rejeitado(self):
         with tempfile.TemporaryDirectory() as pasta:
             caminho = Path(pasta) / "legado.json"
             caminho.write_text(
                 json.dumps({"entidade": "filmes", "campos": ["título"]}),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "versao"):
+            with self.assertRaisesRegex(ValueError, "filtros"):
                 receber_arquivo_json(caminho)
 
     def test_19_arquivo_schema_externo_e_fonte_do_contrato(self):
         raiz = Path(__file__).resolve().parents[1]
-        schema_path = raiz / "schemas" / "requisicao_v1.schema.json"
+        schema_path = raiz / "schemas" / "requisicao.schema.json"
         self.assertEqual(
             json.loads(schema_path.read_text(encoding="utf-8")),
-            ESQUEMA_REQUISICAO_V1,
+            ESQUEMA_REQUISICAO,
         )
-        self.assertNotIn("filme", json.dumps(ESQUEMA_REQUISICAO_V1))
+        self.assertNotIn("filme", json.dumps(ESQUEMA_REQUISICAO))
 
     def test_20_rejeita_propriedades_extras_antes_de_qualquer_geracao(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["sql"] = "SELECT *"
         modelo = Mock()
         banco = Mock()
@@ -227,7 +226,7 @@ class TesteContratoRequisicaoV1(unittest.TestCase):
         banco.execute_select.assert_not_called()
 
     def test_21_rejeita_filtros_sem_tipo_especificado(self):
-        dados = requisicao_v1()
+        dados = pedido_valido()
         dados["filtros"] = {"ano": {"valor": 2025}}
         with self.assertRaisesRegex(ValueError, "filtros"):
             normalizar_requisicao(dados)

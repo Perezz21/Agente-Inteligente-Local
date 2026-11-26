@@ -27,11 +27,11 @@ Também reproduzi a aceitação de planos desconectados e de uma condição `ON`
 
 ## D. Generalização e utilidade dos cenários
 
-Em outro computador, o agente lê as tabelas, colunas e FKs do MySQL configurado. O fluxo normal recebe a requisição v1.0 e o catálogo descoberto. Os arquivos em `experiments/` são opcionais e servem para repetir perguntas com respostas conhecidas. Por exemplo, o caso de filme e idioma permite detectar uma regressão no Sakila. Seus nomes de tabelas e seus resultados não ajudam o agente a interpretar um banco de vendas. O mesmo código de resolução foi exercitado com nomes e relacionamentos de três domínios, contando o esquema sintético.
+Em outro computador, o agente lê as tabelas, colunas e FKs do MySQL configurado. O fluxo normal recebe a requisição e o catálogo descoberto. Os arquivos em `experiments/` são opcionais e servem para repetir perguntas com respostas conhecidas. Por exemplo, o caso de filme e idioma permite detectar uma regressão no Sakila. Seus nomes de tabelas e seus resultados não ajudam o agente a interpretar um banco de vendas. O mesmo código de resolução foi exercitado com nomes e relacionamentos de três domínios, contando o esquema sintético.
 
 ## E. Riscos e limitações
 
-O conector implementado atende MySQL. Um esquema com códigos opacos, FKs ausentes ou dois caminhos plausíveis pode exigir uma pergunta mais precisa. A resolução atual também tem limites para autojunções e para dois papéis da mesma tabela na mesma consulta. A associação de vocabulário de negócio a uma coluna ainda depende do modelo. O contrato v1.0 exige referências físicas em `agrupamento` e `agregacoes`, o que exige conhecimento do esquema nesses campos. Aceitar descrições livres ali exigiria definir como tratar ambiguidades e preservar a compatibilidade dos clientes.
+O conector implementado atende MySQL. Um esquema com códigos opacos, FKs ausentes ou dois caminhos plausíveis pode exigir uma pergunta mais precisa. A resolução atual também tem limites para autojunções e para dois papéis da mesma tabela na mesma consulta. A associação de vocabulário de negócio a uma coluna ainda depende do modelo. O contrato exige referências físicas em `agrupamento` e `agregacoes`, o que exige conhecimento do esquema nesses campos. Aceitar descrições livres ali exigiria definir como tratar ambiguidades e preservar a compatibilidade dos clientes.
 
 ## F. Conclusão para o TCC
 
