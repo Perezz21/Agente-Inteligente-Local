@@ -9,7 +9,8 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, font, ttk
 
-from src.interface.visual import FUNDO, EDITOR, PAINEL
+from src.interface.visual import EDITOR, PAINEL, BORDA, SINTAXE, TEXTO, Botao, barra as rolagem, superficie
+import customtkinter as ctk
 
 
 def selecionar(registros, busca, coluna=None, reversa=False):
@@ -65,7 +66,11 @@ class Tabela:
         barra = ttk.Frame(pai)
         barra.pack(fill="x", pady=(0, 8))
         ttk.Label(barra, text="Pesquisar registros", style="Suave.TLabel").pack(side="left")
-        ttk.Entry(barra, textvariable=self.busca, width=28).pack(side="left", padx=(10, 12))
+        campo = ctk.CTkEntry(barra, textvariable=self.busca, width=210, height=36, corner_radius=9,
+                     fg_color=PAINEL, bg_color=superficie(barra), border_color=BORDA, border_width=1, text_color=TEXTO)
+        campo.pack(side="left", padx=(10, 12))
+        campo.bind("<FocusIn>", lambda _: campo.configure(border_color=SINTAXE))
+        campo.bind("<FocusOut>", lambda _: campo.configure(border_color=BORDA))
         self.info = ttk.Label(barra, style="Suave.TLabel")
         self.info.pack(side="right")
         quadro = ttk.Frame(pai)
@@ -73,7 +78,7 @@ class Tabela:
         quadro.columnconfigure(0, weight=1)
         quadro.rowconfigure(0, weight=1)
         ids = [f"c{i}" for i in range(len(self.nomes))]
-        self.grade = ttk.Treeview(quadro, columns=ids, show="headings")
+        self.grade = ttk.Treeview(quadro, columns=ids, show="headings", height=1)
         self.grade.grid(row=0, column=0, sticky="nsew")
         fonte = font.nametofont("TkDefaultFont", root=pai)
         for idx, nome in zip(ids, self.nomes):
@@ -85,16 +90,13 @@ class Tabela:
         self.grade.tag_configure("par", background=PAINEL)
         self.grade.tag_configure("impar", background=EDITOR)
         for eixo, orient, row, col, sticky in [("y", "vertical", 0, 1, "ns"), ("x", "horizontal", 1, 0, "ew")]:
-            scroll = ttk.Scrollbar(quadro, orient=orient, command=getattr(self.grade, eixo+"view"))
+            scroll = rolagem(quadro, orient=orient, command=getattr(self.grade, eixo+"view"))
             scroll.grid(row=row, column=col, sticky=sticky)
             self.grade.configure(**{eixo+"scrollcommand": scroll.set})
-        rodape = ttk.Frame(pai)
-        rodape.pack(fill="x", pady=(8, 0))
-        self.ant = ttk.Button(rodape, text="Anterior", command=lambda: self.mostrar(self.inicio-100),
-                              style="Terciario.TButton")
-        self.prox = ttk.Button(rodape, text="Próxima", command=lambda: self.mostrar(self.inicio+100))
-        self.prox.pack(side="right")
-        self.ant.pack(side="right", padx=6)
+        rodape = self.rodape = ttk.Frame(pai)
+        rodape.pack(side="bottom", before=quadro, fill="x", pady=(8, 0))
+        self.ant = Botao(rodape, "Anterior", lambda: self.mostrar(self.inicio-100), "terciario")
+        self.prox = Botao(rodape, text="Próxima", command=lambda: self.mostrar(self.inicio+100))
         self.busca.trace_add("write", lambda *_: self.agendar())
         pai.bind("<Destroy>", self.fechar, add="+")
         self.mostrar(0)
@@ -147,6 +149,12 @@ class Tabela:
         total = len(self.linhas)
         self.info.configure(text=(f"{inicio+1}–{min(inicio+100, total)} de {total}" if total
                                   else "Nenhum registro encontrado"))
+        if total > 100:
+            self.prox.pack(side="right")
+            self.ant.pack(side="right", padx=6)
+        else:
+            self.prox.pack_forget()
+            self.ant.pack_forget()
         self.ant.configure(state="normal" if inicio else "disabled")
         self.prox.configure(state="normal" if inicio+100 < total else "disabled")
 

@@ -1,29 +1,23 @@
 # Interface do Agente Inteligente Local
 
-Capturas da interface Tk no Windows, em uma janela de 1152 × 720. Os resultados
-usam respostas controladas do cenário de demonstração; os tempos e registros
-ilustram a apresentação visual e não representam uma consulta em produção.
-A comparação mostra a versão anterior à esquerda e a nova identidade à direita.
+Capturas das janelas reais em Linux com Tk 8.6 e CustomTkinter. As janelas principais têm 1152 × 720 pixels. A demonstração usa uma requisição de leituras de estações, três tabelas e uma resposta controlada. Os valores e tempos ilustram a interface. O banco e o Ollama do usuário não foram acessados.
 
-| Requisição | Processamento |
+| Requisição JSON | Acompanhamento da consulta |
 |---|---|
-| [![Editor JSON e ambiente da sessão](entrada.png)](entrada.png) | [![Etapas e cronômetro](processamento.png)](processamento.png) |
+| [![Editor com os dois cards de ambiente](entrada.png)](entrada.png) | [![Etapas enviadas à interface durante o teste](processamento.png)](processamento.png) |
 
-| SQL | Registros |
+| SQL parametrizada | Registros recuperados |
 |---|---|
-| [![SQL e parâmetros](sql.png)](sql.png) | [![Tabela de resultados](registros.png)](registros.png) |
+| [![SQL formatada e parâmetros](sql.png)](sql.png) | [![Pesquisa, tabela e exportação](registros.png)](registros.png) |
 
-| Interpretação | Relacionamentos |
+| Interpretação e chaves estrangeiras | Detalhes técnicos |
 |---|---|
-| [![Cards da interpretação](interpretacao.png)](interpretacao.png) | [![Grafo dinâmico de tabelas e chaves estrangeiras](relacionamentos.png)](relacionamentos.png) |
+| [![Resumo e grafo das tabelas](interpretacao.png)](interpretacao.png) | [![Tempos, tentativas e tokens](metricas.png)](metricas.png) |
 
-| Métricas |
-|---|
-| [![Tempos acumulados e da última interpretação](metricas.png)](metricas.png) |
+[Abrir grafo em detalhe](relacionamentos.png) · [Ver erro de sintaxe no editor](erro.png)
 
-## Comparação visual
+## Antes e depois
 
-[![Antes e depois da interface](comparacao.png)](comparacao.png)
+À esquerda, a versão anterior da branch. À direita, a versão com o ambiente abaixo do editor.
 
-O editor preserva a requisição quando uma etapa falha e indica a posição dos
-erros de sintaxe. [Abrir captura do alerta de validação](erro.png)
+[![Comparação das duas telas de entrada](comparacao.png)](comparacao.png)

@@ -4,7 +4,7 @@ import os
 import queue
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, font, ttk
 from pathlib import Path
 import re
 from src.interface.processamento import Progresso, ETAPAS, EVENTOS, ORIENTACOES
@@ -19,7 +19,7 @@ from src.agente.entrada import interpretar_json
 
 from src.interface.visual import (PAINEL, EDITOR, TEXTO, SUAVE, DESTAQUE, ERRO,
                                   painel, rotulo, indicador, cabecalho, estilo,
-                                  icone_ambiente, truncar, dica)
+                                  FUNDO, BORDA, SINTAXE, Botao, Abas, barra as rolagem_tk, icone, truncar, dica)
 
 CLAUSULAS = {"FROM", "WHERE", "GROUP_BY", "ORDER_BY", "LIMIT", "HAVING",
              "JOIN", "LEFT", "RIGHT", "INNER", "CROSS", "AND", "ON"}
@@ -66,10 +66,10 @@ def _area(pai, numerar=False, json_editor=False):
                     selectbackground="#624033", selectforeground=TEXTO,
                     font="TkFixedFont", wrap="none", borderwidth=0, padx=14, pady=12,
                     width=1, height=2, undo=numerar, highlightthickness=1,
-                    highlightbackground=EDITOR, highlightcolor=DESTAQUE)
+                    highlightbackground=EDITOR, highlightcolor=BORDA)
     texto.grid(row=0, column=1, sticky="nsew")
-    vertical = ttk.Scrollbar(quadro, command=texto.yview)
-    horizontal = ttk.Scrollbar(quadro, orient="horizontal", command=texto.xview)
+    vertical = rolagem_tk(quadro, command=texto.yview)
+    horizontal = rolagem_tk(quadro, orient="horizontal", command=texto.xview)
     vertical.grid(row=0, column=2, sticky="ns")
     horizontal.grid(row=1, column=1, sticky="ew")
     texto.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
@@ -107,7 +107,7 @@ def _leitura(pai, conteudo, sql=False):
     texto = _area(pai, numerar=sql)
     texto.insert("1.0", conteudo)
     if sql:
-        texto.tag_configure("sql", foreground=DESTAQUE)
+        texto.tag_configure("sql", foreground=SINTAXE)
         try:
             tokens = Dialect.get_or_raise("mysql").tokenize(conteudo)
         except TokenError:
@@ -164,63 +164,64 @@ class Aplicacao:
         self.quadro.pack(fill="both", expand=True)
         cabecalho(self.quadro, "Agente Inteligente Local", "Inteligência aplicada a bancos de dados")
         self.estado = tk.StringVar(value="Pronto para editar")
-        rodape = ttk.Frame(self.quadro)
-        rodape.pack(side="bottom", fill="x", pady=(12, 0))
-        ttk.Label(rodape, textvariable=self.estado, style="Suave.TLabel", wraplength=450).pack(side="left")
         self.botoes = []
-        self.acao = self.botao(rodape, "Executar consulta", self.executar, principal=True)
-        self.acao.pack(side="right")
-        corpo = ttk.Frame(self.quadro)
-        corpo.pack(fill="both", expand=True)
-        self.lateral = painel(corpo, width=225)
-        self.lateral.pack(side="right", fill="y", padx=(14, 0))
-        rotulo(self.lateral, "Ambiente da sessão", "Secao").pack(anchor="w", pady=(2, 14))
-        config = OllamaConfig.from_environment()
         self.banco = os.getenv("MYSQL_DATABASE", "agente_experimental")
-        self.modelo = config.model or "Não configurado"
+        self.modelo = OllamaConfig.from_environment().model or "Não configurado"
         self.conexao = tk.StringVar(value="Não verificada")
-        for nome, valor in [("Banco de dados", self.banco), ("Modelo local", self.modelo),
-                            ("Conexão MySQL", None), ("Processamento", "Local"),
-                            ("Acesso do agente", "Somente leitura")]:
-            cartao = tk.Frame(self.lateral, bg=PAINEL)
-            cartao.pack(fill="x", pady=(0, 15))
-            icone_ambiente(cartao, nome).pack(side="left", anchor="n", padx=(0, 9))
-            rotulo(cartao, nome, "Legenda").pack(anchor="w")
-            texto_valor = truncar(valor or "", 20)
-            detalhe = rotulo(cartao, texto_valor, "Sucesso" if nome == "Acesso do agente" else "Secao",
-                             **({"textvariable": self.conexao} if valor is None else {}), anchor="w")
-            detalhe.configure(width=20)
-            detalhe.pack(anchor="w", pady=(3, 0))
-            if valor:
-                dica(detalhe, str(valor))
-        self.centro = ttk.Frame(corpo)
+        self.centro = ttk.Frame(self.quadro)
         self.centro.pack(fill="both", expand=True)
-        self.ambiente_btn = ttk.Button(rodape, text="Ambiente", command=self.alternar_ambiente)
-        self.compacta = False
-        def adaptar(evento):
-            estreita = evento.width < raiz.winfo_fpixels("660p")
-            if estreita != self.compacta:
-                self.compacta = estreita
-                if estreita:
-                    self.lateral.pack_forget()
-                    self.ambiente_btn.pack(side="right", padx=8)
-                else:
-                    self.ambiente_btn.pack_forget()
-                    self.lateral.pack(side="right", before=self.centro, fill="y", padx=(14, 0))
-        corpo.bind("<Configure>", adaptar)
+        self.sessao = ttk.Frame(self.centro)
+        self.sessao.pack(fill="x", side="bottom", pady=(12, 0))
+        for i, (nome, valor, simbolo) in enumerate([
+                ("Banco de dados", self.banco, "banco"), ("Modelo de inteligência", self.modelo, "modelo")]):
+            self.sessao.columnconfigure(i, weight=1, uniform="ambiente")
+            card = painel(self.sessao)
+            card.grid(row=0, column=i, sticky="nsew", padx=(0, 6) if not i else (6, 0))
+            icone(card.conteudo, simbolo, tamanho=21).pack(side="left", padx=(0, 12))
+            if i:
+                rotulo(card.conteudo, "Local").pack(side="right")
+            else:
+                estado = tk.Frame(card.conteudo, bg=PAINEL)
+                estado.pack(side="right")
+                rotulo(estado, "MySQL", "Legenda").pack(anchor="e")
+                rotulo(estado, "", textvariable=self.conexao).pack(anchor="e")
+            info = tk.Frame(card.conteudo, bg=PAINEL, width=1)
+            info.pack(side="left", fill="x", expand=True)
+            rotulo(info, nome).pack(anchor="w")
+            detalhe = rotulo(info, truncar(valor), "Legenda", foreground=TEXTO, takefocus=True)
+            detalhe.pack(anchor="w")
+            dica(detalhe, valor)
+            fonte = font.Font(root=raiz, font=ttk.Style(raiz).lookup("Legenda.TLabel", "font"))
+            def ajustar(evento, label=detalhe, completo=valor, fonte=fonte):
+                minimo, maximo = 1, len(completo)
+                while minimo < maximo:
+                    meio = (minimo + maximo + 1) // 2
+                    if fonte.measure(truncar(completo, meio)) <= evento.width - 8:
+                        minimo = meio
+                    else:
+                        maximo = meio - 1
+                label.configure(text=truncar(completo, minimo))
+            info.bind("<Configure>", ajustar)
         self.entrada = painel(self.centro)
         self.entrada.pack(fill="both", expand=True)
-        topo = tk.Frame(self.entrada, bg=PAINEL)
+        topo = tk.Frame(self.entrada.conteudo, bg=PAINEL)
         topo.pack(fill="x")
-        rotulo(topo, "Requisição JSON", "Secao").pack(side="left")
-        rotulo(topo, "Contrato v1.0", "Legenda").pack(side="right")
-        rotulo(self.entrada, "Substitua os campos entre < > ou importe uma requisição.").pack(anchor="w", pady=(3, 9))
-        barra = tk.Frame(self.entrada, bg=PAINEL)
+        rotulo(topo, "Nova consulta", "Secao").pack(side="left")
+        icone(topo, "seguro", tamanho=16).pack(side="left", padx=(16, 5))
+        rotulo(topo, "Somente leitura").pack(side="left")
+        rotulo(self.entrada.conteudo, "Cole uma requisição JSON v1.0 ou substitua os campos entre < >.").pack(anchor="w", pady=(2, 8))
+        barra = tk.Frame(self.entrada.conteudo, bg=PAINEL)
         barra.pack(fill="x", pady=(0, 8))
-        for nome, funcao in [("Importar JSON", self.importar), ("Formatar", self.formatar),
-                             ("Validar JSON", self.validar), ("Limpar", self.limpar)]:
-            self.botao(barra, nome, funcao, terciario=nome == "Limpar").pack(side="left", padx=(0, 8))
-        self.editor = _area(self.entrada, True, json_editor=True)
+        for nome, funcao, simbolo in [("Importar JSON", self.importar, "importar"), ("Formatar", self.formatar, "codigo"),
+                                      ("Validar", self.validar, "sucesso"), ("Limpar", self.limpar, "limpar")]:
+            self.botao(barra, nome, funcao, "terciario" if nome == "Limpar" else "secundario",
+                       simbolo).pack(side="left", padx=(0, 6))
+        rodape = tk.Frame(self.entrada.conteudo, bg=PAINEL)
+        rodape.pack(side="bottom", fill="x", pady=(10, 0))
+        rotulo(rodape, "", textvariable=self.estado, wraplength=400).pack(side="left")
+        self.acao = self.botao(rodape, "Executar consulta", self.executar, "primario", "executar")
+        self.acao.pack(side="right")
+        self.editor = _area(self.entrada.conteudo, True, json_editor=True)
         for tag, cor in [("chave", "#F59A62"), ("valor", TEXTO), ("numero", "#D7B4E8")]:
             self.editor.tag_configure(tag, foreground=cor)
         self.editor.tag_configure("falha", underline=True, foreground=ERRO)
@@ -245,15 +246,8 @@ class Aplicacao:
         self.editor.tk_focusNext().focus_set()
         return "break"
 
-    def alternar_ambiente(self):
-        if self.lateral.winfo_manager():
-            self.lateral.pack_forget()
-        else:
-            self.lateral.pack(side="right", before=self.centro, fill="y", padx=(12, 0))
-
-    def botao(self, pai, nome, funcao, principal=False, terciario=False):
-        estilo_botao = "Executar.TButton" if principal else "Terciario.TButton" if terciario else "TButton"
-        b = ttk.Button(pai, text=nome, command=funcao, style=estilo_botao)
+    def botao(self, pai, nome, funcao, tipo="secundario", simbolo=None):
+        b = Botao(pai, nome, funcao, tipo, simbolo)
         self.botoes.append(b)
         return b
 
@@ -267,12 +261,12 @@ class Aplicacao:
         self.limpar_erro()
         self.erro = painel(self.centro)
         self.erro.pack(before=self.entrada, fill="x", pady=(0, 8))
-        aviso = tk.Canvas(self.erro, width=24, height=24, bg=PAINEL, highlightthickness=0)
+        aviso = tk.Canvas(self.erro.conteudo, width=24, height=24, bg=PAINEL, highlightthickness=0)
         aviso.pack(side="left", anchor="n", padx=(0, 10))
         aviso.create_oval(3, 3, 21, 21, outline=ERRO, width=1.5)
         aviso.create_line(12, 7, 12, 13, fill=ERRO, width=2, capstyle="round")
         aviso.create_oval(11, 16, 13, 18, fill=ERRO, outline="")
-        conteudo = tk.Frame(self.erro, bg=PAINEL)
+        conteudo = tk.Frame(self.erro.conteudo, bg=PAINEL)
         conteudo.pack(side="left", fill="x", expand=True)
         rotulo(conteudo, f"Falha · {ETAPAS[etapa]}", "Erro").pack(anchor="w")
         rotulo(conteudo, descricao, wraplength=650, justify="left").pack(anchor="w", pady=3)
@@ -284,12 +278,11 @@ class Aplicacao:
                 detalhes.pack(anchor="w")
         acoes = tk.Frame(conteudo, bg=PAINEL)
         acoes.pack(anchor="w", pady=(4, 0))
-        ttk.Button(acoes, text="Detalhes técnicos", command=alternar,
-                   style="Terciario.TButton").pack(side="left")
+        Botao(acoes, "Detalhes técnicos", alternar, "terciario").pack(side="left")
         def corrigir():
             self.limpar_erro()
             self.editor.focus_set()
-        ttk.Button(acoes, text="Editar requisição", command=corrigir).pack(side="left", padx=6)
+        Botao(acoes, text="Editar requisição", command=corrigir).pack(side="left", padx=6)
         self.estado.set("Revise a requisição para tentar novamente.")
         self.editor.focus_set()
 
@@ -345,6 +338,7 @@ class Aplicacao:
 
     def _ocupacao(self, ativa):
         self.ocupada = ativa
+        self.acao.configure(text="Processando..." if ativa else "Executar consulta")
         estado = "disabled" if ativa else "normal"
         self.editor.configure(state=estado)
         for botao in self.botoes:
@@ -361,6 +355,7 @@ class Aplicacao:
         self.anterior = pedido
         self.progresso.concluir_etapa()
         self.entrada.pack_forget()
+        self.sessao.pack_forget()
         self.progresso.caixa.pack(fill="both", expand=True)
         self.conexao.set("Não verificada")
         self._ocupacao(True)
@@ -392,6 +387,7 @@ class Aplicacao:
                 continue
             self.progresso.finalizar(tipo == "resultado")
             self.progresso.caixa.pack_forget()
+            self.sessao.pack(fill="x", side="bottom", pady=(12, 0))
             self.entrada.pack(fill="both", expand=True)
             if self.conexao.get() == "Conectada":
                 self.conexao.set("Sessão encerrada")
@@ -426,35 +422,35 @@ class Aplicacao:
         quadro = ttk.Frame(janela, padding=(24, 16))
         quadro.pack(fill="both", expand=True)
         total = resposta["total_registros"]
-        cabecalho(quadro, "Consulta concluída", f"Consulta executada em {self.banco}  ·  "
-                  + ("Nenhum registro recuperado." if not total else "Resultados disponíveis para consulta."), True)
+        cabecalho(quadro, "Consulta concluída", "Consulta validada e executada no banco de dados.", True)
         m = resposta["metricas"]
+        plano_real = resposta["interpretacao"]
+        identificadas = plano_real.get("tabelas_identificadas")
         cards = ttk.Frame(quadro)
         cards.pack(fill="x", pady=(0, 12))
-        for i, (titulo, valor) in enumerate([
-            ("Registros recuperados", total), ("Tempo da requisição", segundos(m.get("tempo_total_segundos"))),
-            ("Tentativas de interpretação", m.get("tentativas_interpretacao")), ("Tentativas SQL", m.get("tentativas_sql"))
-        ]):
+        for i, (titulo, valor, simbolo, detalhe) in enumerate([
+            ("Registros recuperados", str(total), "tabela", truncar(self.banco)),
+            ("Tempo de execução", segundos(m.get("tempo_total_segundos")), "tempo", "Interpretação, geração e execução"),
+            ("Tabelas identificadas", str(len(set(identificadas))) if identificadas is not None else "—",
+             "rede", "")]):
             cards.columnconfigure(i, weight=1, uniform="resumo")
-            caixa, _ = indicador(cards, titulo, "Não disponível" if valor is None else str(valor))
-            caixa.grid(row=0, column=i, sticky="nsew", padx=(0, 8) if i < 3 else 0)
+            indicador(cards, titulo, valor, simbolo, detalhe).grid(row=0, column=i, sticky="nsew",
+                                                                  padx=(0, 10) if i < 2 else 0)
         rodape = ttk.Frame(quadro)
         rodape.pack(side="bottom", fill="x", pady=(10, 0))
-        abas = ttk.Notebook(quadro)
+        abas = Abas(quadro, ("Consulta SQL", "Resultados", "Interpretação"))
         abas.pack(fill="both", expand=True)
-        abas.enable_traversal()
-        secoes = []
-        for nome in ("Consulta SQL", "Resultados", "Interpretação", "Métricas"):
-            secao = ttk.Frame(abas, padding=10)
-            abas.add(secao, text=nome)
-            secoes.append(secao)
-        sql, tabela, plano, met = secoes
+        painel_sql = painel(abas.paginas["Consulta SQL"])
+        painel_sql.pack(fill="both", expand=True)
+        sql = painel_sql.conteudo
+        tabela, plano = abas.paginas["Resultados"], abas.paginas["Interpretação"]
         consulta = formatar_sql(resposta["consulta_sql"])
         parametros = _json(resposta["parametros"])
-        barra = ttk.Frame(sql)
-        barra.pack(fill="x", pady=(0, 6))
+        barra = tk.Frame(sql, bg=PAINEL)
+        barra.pack(fill="x", pady=(0, 8))
+        rotulo(barra, "Consulta SQL gerada", "Secao").pack(side="left")
         retorno = tk.StringVar(janela)
-        ttk.Label(barra, textvariable=retorno, style="Sucesso.TLabel").pack(side="left")
+        rotulo(barra, "", "Sucesso", textvariable=retorno).pack(side="left", padx=8)
 
         def copiar(conteudo, mensagem):
             janela.clipboard_clear()
@@ -469,22 +465,29 @@ class Aplicacao:
                     retorno.set("SQL salva.")
                 except OSError:
                     retorno.set("Falha ao salvar. Confira a pasta.")
-        for nome, funcao in [("Salvar SQL", salvar_sql),
-                             ("Copiar parâmetros", lambda: copiar(parametros, "Parâmetros copiados.")),
-                             ("Copiar SQL", lambda: copiar(consulta, "SQL copiada."))]:
-            ttk.Button(barra, text=nome, command=funcao).pack(side="right", padx=(6, 0))
-        suporte = ttk.Panedwindow(sql, orient="vertical")
-        suporte.pack(fill="both", expand=True)
-        for titulo, conteudo, destaque, peso in [
-            ("SQL aprovada", consulta, True, 4), ("Parâmetros", parametros, False, 1)
-        ]:
-            bloco = ttk.Frame(suporte)
-            suporte.add(bloco, weight=peso)
-            ttk.Label(bloco, text=titulo, style="Legenda.TLabel").pack(anchor="w", pady=3)
-            _leitura(bloco, conteudo, destaque)
-        _tabela(tabela, resposta["registros"])
-        interpretacao(plano, resposta["interpretacao"], self.anterior or {}, _leitura)
-        metricas(met, m, aviso)
+        Botao(barra, "Copiar SQL", lambda: copiar(consulta, "SQL copiada.")).pack(side="right")
+        Botao(barra, "Salvar SQL", salvar_sql, "terciario").pack(side="right", padx=6)
+        params = tk.Frame(sql, bg=PAINEL)
+        params.pack(side="bottom", fill="x", pady=(8, 0))
+        if resposta["parametros"]:
+            Botao(params, "Copiar parâmetros", lambda: copiar(parametros, "Parâmetros copiados."),
+                  "terciario").pack(side="right")
+            rotulo(params, "Parâmetros", "Legenda").pack(side="left", padx=(0, 8))
+            texto_params = tk.Entry(params, readonlybackground=PAINEL, fg=TEXTO, relief="flat",
+                                    font="TkFixedFont", width=1, highlightthickness=0)
+            texto_params.pack(side="left", fill="x", expand=True)
+            texto_params.insert(0, json.dumps(resposta["parametros"], ensure_ascii=False, default=str))
+            texto_params.configure(state="readonly")
+        else:
+            rotulo(params, "Nenhum parâmetro utilizado.").pack(anchor="w")
+        _leitura(sql, consulta, True)
+        registros = _tabela(tabela, resposta["registros"])
+        interpretacao(plano, plano_real, self.anterior or {}, _leitura)
+
+        def detalhes():
+            from src.interface.analise import janela_auxiliar
+            auxiliar = janela_auxiliar(janela, "Detalhes técnicos")
+            metricas(auxiliar, m, aviso)
 
         def voltar(nova=False):
             janela.destroy()
@@ -519,14 +522,14 @@ class Aplicacao:
                     exportacao.configure(state="normal")
             threading.Thread(target=escrever, name="exportacao-local").start()
             janela.after(60, conferir)
-        ttk.Button(rodape, text="Encerrar", command=self.encerrar).pack(side="left")
-        exportacao = ttk.Button(rodape, text="Exportar resultados", command=exportar)
-        exportacao.pack(side="left", padx=6)
+        Botao(rodape, "Encerrar", self.encerrar, "terciario").pack(side="left")
+        Botao(rodape, "Detalhes técnicos", detalhes, "terciario").pack(side="left", padx=6)
+        exportacao = Botao(registros.rodape, "Exportar resultados", exportar)
+        exportacao.pack(side="left")
         status = tk.StringVar(janela)
-        ttk.Label(rodape, textvariable=status, style="Suave.TLabel").pack(side="left")
-        ttk.Button(rodape, text="Nova consulta", command=lambda: voltar(True),
-                   style="Executar.TButton").pack(side="right")
-        ttk.Button(rodape, text="Voltar à requisição", command=voltar).pack(side="right", padx=6)
+        rotulo(registros.rodape, "", textvariable=status).pack(side="left", padx=6)
+        Botao(rodape, "Nova consulta", lambda: voltar(True), "primario", "novo").pack(side="right")
+        Botao(rodape, "Voltar à requisição", voltar).pack(side="right", padx=8)
         janela.protocol("WM_DELETE_WINDOW", voltar)
         janela.focus_set()
 

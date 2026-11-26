@@ -3,7 +3,7 @@ from time import monotonic
 import tkinter as tk
 from tkinter import ttk
 
-from src.interface.visual import SUAVE, DESTAQUE, ERRO, SUCESSO, PAINEL, EDITOR, painel, rotulo
+from src.interface.visual import SUAVE, DESTAQUE, ERRO, SUCESSO, PAINEL, EDITOR, painel, rotulo, Botao
 
 ETAPAS = ("Validação da requisição", "Verificação do modelo local", "Conexão com o banco de dados",
           "Descoberta da estrutura", "Interpretação semântica", "Planejamento dos relacionamentos",
@@ -27,7 +27,7 @@ ORIENTACOES = (
 class Progresso:
     def __init__(self, pai):
         self.caixa = painel(pai)
-        topo = tk.Frame(self.caixa, bg=PAINEL)
+        topo = tk.Frame(self.caixa.conteudo, bg=PAINEL)
         topo.pack(fill="x")
         rotulo(topo, "Processamento da consulta", "Secao").pack(side="left")
         cronometro = tk.Frame(topo, bg=EDITOR, padx=12, pady=6)
@@ -35,19 +35,26 @@ class Progresso:
         rotulo(cronometro, "TEMPO REAL", "Legenda", background=EDITOR).pack(side="left", padx=(0, 10))
         self.tempo = ttk.Label(cronometro, text="00:00", style="Valor.TLabel", background=EDITOR)
         self.tempo.pack(side="right")
-        self.atividade = ttk.Progressbar(self.caixa, mode="indeterminate", length=180)
-        self.atividade.pack(fill="x", pady=(14, 16))
+        self.acao = Botao(self.caixa.conteudo, "Processando...", None, "primario")
+        self.acao.configure(state="disabled")
+        self.acao.pack(side="bottom", anchor="e", pady=(4, 0))
         self.estados, self.pontos = [], []
-        for nome in ETAPAS:
-            linha = tk.Frame(self.caixa, bg=PAINEL)
-            linha.pack(fill="x", pady=5)
-            ponto = tk.Canvas(linha, width=22, height=22, bg=PAINEL, highlightthickness=0)
+        for indice, nome in enumerate(ETAPAS):
+            linha = tk.Frame(self.caixa.conteudo, bg=PAINEL)
+            linha.pack(fill="x")
+            ponto = tk.Canvas(linha, width=22, height=32, bg=PAINEL, highlightthickness=0)
             ponto.pack(side="left", padx=(0, 10))
-            ponto.create_oval(4, 4, 18, 18, outline=SUAVE, width=1.3, tags="anel")
-            ponto.create_line(7, 11, 10, 14, 15, 8, fill=SUCESSO, width=2,
+            if indice:
+                ponto.create_line(11, 0, 11, 9, fill=SUAVE)
+            if indice < len(ETAPAS)-1:
+                ponto.create_line(11, 23, 11, 32, fill=SUAVE)
+            ponto.create_oval(4, 9, 18, 23, outline=SUAVE, width=1.3, tags="anel")
+            ponto.create_line(7, 16, 10, 19, 15, 13, fill=EDITOR, width=2,
                               capstyle="round", joinstyle="round", state="hidden", tags="marca")
-            ponto.create_arc(3, 3, 19, 19, start=30, extent=250, style="arc",
+            ponto.create_arc(3, 8, 19, 24, start=30, extent=250, style="arc",
                              outline=DESTAQUE, width=2, state="hidden", tags="giro")
+            ponto.create_text(11, 16, text="!", fill=EDITOR, font=("TkDefaultFont", 9, "bold"),
+                              state="hidden", tags="alerta")
             self.pontos.append(ponto)
             rotulo(linha, nome).pack(side="left")
             estado = rotulo(linha, "Pendente", "Legenda")
@@ -62,11 +69,11 @@ class Progresso:
         for estado, ponto in zip(self.estados, self.pontos):
             estado.configure(text="Pendente", foreground=SUAVE)
             ponto.itemconfigure("anel", outline=SUAVE, fill="")
+            ponto.itemconfigure("alerta", state="hidden")
             ponto.itemconfigure("marca", state="hidden")
             ponto.itemconfigure("giro", state="hidden")
         self.atual = 0
         self.entrar(0)
-        self.atividade.start(24)
         self.relogio()
 
     def relogio(self):
@@ -96,7 +103,8 @@ class Progresso:
         self.concluir_etapa()
         self.atual = indice
         self.estados[indice].configure(text="Em processamento", foreground=DESTAQUE)
-        self.pontos[indice].itemconfigure("anel", outline=DESTAQUE)
+        self.pontos[indice].itemconfigure("marca", state="hidden")
+        self.pontos[indice].itemconfigure("anel", outline=DESTAQUE, fill="")
         self.pontos[indice].itemconfigure("giro", state="normal", start=self.giro)
         self.animar()
         if indice == 4:
@@ -114,7 +122,6 @@ class Progresso:
         ponto.itemconfigure("giro", state="hidden")
 
     def finalizar(self, sucesso):
-        self.atividade.stop()
         self.relogio()
         self.parar_spinner()
         self.inicio = None
@@ -128,3 +135,4 @@ class Progresso:
             ponto.itemconfigure("anel", fill=ERRO, outline=ERRO)
             ponto.itemconfigure("giro", state="hidden")
             ponto.itemconfigure("marca", state="hidden")
+            ponto.itemconfigure("alerta", state="normal")

@@ -75,6 +75,13 @@ class SessaoCompartilhada(unittest.TestCase):
         ler.assert_called_once()
 
 
+def fechar_tk(raiz):
+    # Cada teste cria um interpretador. Cancele seus temporizadores antes de destruí-lo.
+    for tarefa in raiz.tk.call("after", "info"):
+        raiz.after_cancel(tarefa)
+    raiz.destroy()
+
+
 class JanelasTk(unittest.TestCase):
     def setUp(self):
         try:
@@ -87,7 +94,7 @@ class JanelasTk(unittest.TestCase):
         except tk.TclError as exc:
             self.skipTest(str(exc))
         self.ui = janelas
-        self.addCleanup(self.raiz.destroy)
+        self.addCleanup(fechar_tk, self.raiz)
         self.servico = Mock(return_value=(RESULTADO, "Métricas registradas"))
         self.app = janelas.Aplicacao(self.raiz, self.servico)
         self.raiz.update()
@@ -125,7 +132,8 @@ class JanelasTk(unittest.TestCase):
         self.assertEqual(self.app.validar(), PEDIDO)
         self.raiz.update()
         self.assertIn('\n  "versao"', self.app.editor.get("1.0", "end-1c"))
-        margem = self.widgets(self.app.editor.master, self.ui.tk.Canvas)[0]
+        margem = next(c for c in self.widgets(self.app.editor.master, self.ui.tk.Canvas)
+                      if c.master is self.app.editor.master)
         self.assertGreater(len(margem.find_all()), 1)
         self.app.limpar()
         self.assertEqual(self.app.editor.get("1.0", "end-1c"), "")
@@ -145,18 +153,20 @@ class JanelasTk(unittest.TestCase):
         try:
             self.aguardar(lambda: self.app.estado.get() == "Interpretação da requisição")
             self.app.executar()
+            self.assertEqual(self.app.progresso.acao.cget("state"), "disabled")
+            self.assertEqual(self.app.acao.cget("text"), "Processando...")
             self.assertNotEqual(threads, [threading.get_ident()])
             self.servico.assert_called_once()
         finally:
             liberar.set()
         self.aguardar(lambda: not self.app.ocupada)
         janela = self.widgets(self.raiz, self.ui.tk.Toplevel)[0]
-        abas = self.widgets(janela, self.ui.ttk.Notebook)[0]
-        self.assertEqual([abas.tab(a, "text") for a in abas.tabs()],
-                         ["Consulta SQL", "Resultados", "Interpretação", "Métricas"])
+        abas = self.widgets(janela, self.ui.Abas)[0]
+        self.assertEqual(list(abas.paginas),
+                         ["Consulta SQL", "Resultados", "Interpretação"])
         grade = self.widgets(janela, self.ui.ttk.Treeview)[0]
         self.assertEqual(grade.item(grade.get_children()[0], "values"), ("A",))
-        botoes = {b.cget("text"): b for b in self.widgets(janela, self.ui.ttk.Button)}
+        botoes = {b.cget("text"): b for b in self.widgets(janela, self.ui.Botao)}
         botoes["Copiar SQL"].invoke()
         self.assertEqual(janela.clipboard_get(), "SELECT amostra.nome\nFROM amostra\nWHERE amostra.id = %s")
         botoes["Voltar à requisição"].invoke()
@@ -180,7 +190,7 @@ class JanelasTk(unittest.TestCase):
                          "SELECT 'FROM x WHERE y',\n    t.`GROUP BY`\nFROM t\nWHERE t.id = %s")
         self.ui._tabela(self.raiz, [{"id": i} for i in range(101)])
         grade = self.widgets(self.raiz, self.ui.ttk.Treeview)[0]
-        botoes = {b.cget("text"): b for b in self.widgets(self.raiz, self.ui.ttk.Button)}
+        botoes = {b.cget("text"): b for b in self.widgets(self.raiz, self.ui.Botao)}
         self.assertEqual(len(grade.get_children()), 100)
         botoes["Próxima"].invoke()
         self.assertEqual(grade.item(grade.get_children()[0], "values"), ("100",))

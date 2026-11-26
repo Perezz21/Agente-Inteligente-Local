@@ -107,7 +107,7 @@ python -m src.main
 ```
 
 Na janela, preencha o modelo de requisição ou importe um JSON com **Ctrl+O**.
-**Validar JSON** confere o contrato v1.0. **Ctrl+Enter** executa a consulta.
+**Validar** confere o contrato v1.0. **Ctrl+Enter** executa a consulta.
 Durante a execução, a tela identifica a etapa em andamento e mostra o tempo decorrido.
 
 Na janela de resultados, **Voltar à requisição** recupera o último pedido para edição.
@@ -115,7 +115,13 @@ Na janela de resultados, **Voltar à requisição** recupera o último pedido pa
 operam sobre os registros já recuperados. **Exportar resultados** salva todos os
 registros em CSV ou JSON, inclusive quando há um filtro visual ativo.
 
-A interface usa Tkinter e ttk com o tema do projeto. Para colar o JSON no
+As abas **Consulta SQL**, **Resultados** e **Interpretação** apresentam a
+consulta, os dados e as relações usadas. **Detalhes técnicos** reúne tempos,
+tokens e tentativas.
+
+A instalação com `python -m pip install -r requirements.txt` inclui CustomTkinter
+para os componentes arredondados e Pillow para os ícones. O Python precisa ter
+suporte a Tk (no Windows, o instalador oferece o componente Tcl/Tk). Para colar o JSON no
 terminal, execute `python -m src.main --cli`. Com `--arquivo`, o processamento
 também permanece no terminal. [Ver capturas das janelas](docs/interface/README.md)
 

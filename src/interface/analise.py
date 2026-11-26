@@ -1,12 +1,10 @@
 """Visualizações da interpretação e das medições produzidas pelo agente."""
 import json
-import math
-import textwrap
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font, ttk
 
 from src.interface.visual import (FUNDO, PAINEL, EDITOR, BORDA, SUAVE, TEXTO,
-                                  DESTAQUE, DESTAQUE_ATIVO, painel, rotulo)
+                                  DESTAQUE, DESTAQUE_ATIVO, SINTAXE, Botao, barra, painel, rotulo)
 
 
 def segundos(valor):
@@ -25,195 +23,130 @@ def _arredondado(tela, x1, y1, x2, y2, raio=9, **opcoes):
     return tela.create_polygon(pontos, smooth=True, splinesteps=12, **opcoes)
 
 
-def _cartao(corpo, titulo, valor, linha, coluna):
-    bloco = painel(corpo)
-    bloco.grid(row=linha, column=coluna, sticky="nsew",
-               padx=(0, 8) if coluna == 0 else (8, 0), pady=(0, 12))
-    rotulo(bloco, titulo, "Legenda").pack(anchor="w")
-    detalhe = ttk.Label(bloco, text=valor, background=PAINEL, foreground=TEXTO,
-                        justify="left", wraplength=320, anchor="nw")
-    detalhe.pack(fill="x", anchor="w", pady=(7, 0))
-    return bloco, detalhe
+def janela_auxiliar(pai, titulo):
+    janela = tk.Toplevel(pai)
+    janela.title(titulo)
+    janela.transient(pai.winfo_toplevel())
+    janela.geometry(f"{min(920, pai.winfo_screenwidth()-64)}x{min(540, pai.winfo_screenheight()-90)}")
+    janela.configure(bg=FUNDO)
+    quadro = ttk.Frame(janela, padding=20)
+    quadro.pack(fill="both", expand=True)
+    janela.bind("<Escape>", lambda _: janela.destroy())
+    return quadro
 
 
-def desenhar_grafo(tela, relacoes, tabelas):
-    """Monta o grafo a partir dos nomes de tabelas e chaves do plano real."""
-    nomes = list(dict.fromkeys(str(nome) for nome in (tabelas or []) if nome))
+def desenhar_grafo(tela, relacoes, tabelas, entidade=""):
+    """Cada ponta de FK tem uma porta rotulada. Cada aresta tem um corredor próprio."""
+    from src.agente.relacionamentos import tabelas_mencionadas
+    fonte = font.nametofont("TkDefaultFont", root=tela)
+    altura = fonte.metrics("linespace") + 9
+    tabelas = dict.fromkeys(tabelas)
     arestas = []
-    for relacao in relacoes or []:
-        origem, destino = str(relacao.get("origem", "")), str(relacao.get("destino", ""))
-        if not origem or not destino:
-            continue
-        tabela_origem = origem.rsplit(".", 1)[0] if "." in origem else origem
-        tabela_destino = destino.rsplit(".", 1)[0] if "." in destino else destino
-        for nome in (tabela_origem, tabela_destino):
-            if nome not in nomes:
-                nomes.append(nome)
-        arestas.append((tabela_origem, origem, tabela_destino, destino))
-    if not nomes:
-        tela.create_text(24, 24, anchor="nw", text="Nenhum relacionamento identificado nesta interpretação.",
-                         fill=SUAVE, font=("TkDefaultFont", 10))
-        tela.configure(scrollregion=(0, 0, 620, 100))
-        return
-
-    adjacencia = {nome: set() for nome in nomes}
-    for origem, _, destino, _ in arestas:
-        adjacencia[origem].add(destino)
-        adjacencia[destino].add(origem)
-    niveis, proximo = {}, 0
-    for raiz in nomes:
-        if raiz in niveis:
-            continue
-        niveis[raiz] = proximo
-        fila = [raiz]
-        while fila:
-            atual = fila.pop(0)
-            for vizinho in nomes:
-                if vizinho in adjacencia[atual] and vizinho not in niveis:
-                    niveis[vizinho] = niveis[atual] + 1
-                    fila.append(vizinho)
-        proximo = max(niveis.values(), default=proximo) + 1
-    colunas = {}
-    for nome in nomes:
-        colunas.setdefault(niveis[nome], []).append(nome)
-    largura_no, passo_x, espacamento_y = 236, 450, 34
-    contagem_pares, contagem_nos = {}, {nome: 0 for nome in nomes}
-    for origem, _, destino, _ in arestas:
-        par = tuple(sorted((origem, destino)))
-        contagem_pares[par] = contagem_pares.get(par, 0) + 1
-        contagem_nos[origem] += 1
-        contagem_nos[destino] += 1
-    alturas = {nome: max(84, 48 + 16 * math.ceil(len(nome) / 27),
-                         48 + contagem_nos[nome] * 18) for nome in nomes}
-    posicoes, max_y = {}, 40
-    for nivel, itens in colunas.items():
-        y = 40
-        for nome in itens:
-            posicoes[nome] = (40 + nivel * passo_x, y, alturas[nome])
-            y += alturas[nome] + espacamento_y
-        max_y = max(max_y, y)
-
-    # Desenha as ligações antes dos nós para que os cartões fiquem à frente.
-    repeticoes = {}
-    for origem, campo_origem, destino, campo_destino in arestas:
-        x1, y1, altura1 = posicoes[origem]
-        x2, y2, altura2 = posicoes[destino]
-        par = tuple(sorted((origem, destino)))
-        indice = repeticoes.get(par, 0)
-        repeticoes[par] = indice + 1
-        deslocamento = (indice - (contagem_pares[par] - 1) / 2) * 18
-        centro1, centro2 = y1 + altura1 / 2 + deslocamento, y2 + altura2 / 2 + deslocamento
-        if x1 < x2:
-            inicio, fim = (x1 + largura_no, centro1), (x2, centro2)
-            tela.create_line(*inicio, *fim, arrow="last", fill=DESTAQUE, width=2, smooth=True)
-            label_x = (inicio[0] + fim[0]) / 2
-        elif x1 > x2:
-            inicio, fim = (x1, centro1), (x2 + largura_no, centro2)
-            tela.create_line(*inicio, *fim, arrow="last", fill=DESTAQUE, width=2, smooth=True)
-            label_x = (inicio[0] + fim[0]) / 2
-        else:
-            faixa = x1 + largura_no + 18
-            tela.create_line(x1 + largura_no, centro1, faixa, centro1, faixa, centro2,
-                             x2 + largura_no, centro2, arrow="last", fill=DESTAQUE, width=2)
-            label_x = faixa
-        nome_fk = f"{campo_origem.rsplit('.', 1)[-1]} → {campo_destino.rsplit('.', 1)[-1]}"
-        texto_fk = tela.create_text(label_x, (centro1 + centro2) / 2, text=nome_fk, fill=TEXTO,
-                                    font=("TkFixedFont", 8), width=180, justify="center",
-                                    tags=("rotulo_fk",))
-        caixa_fk = tela.bbox(texto_fk)
-        if caixa_fk:
-            fundo_fk = _arredondado(tela, caixa_fk[0]-6, caixa_fk[1]-3,
-                                     caixa_fk[2]+6, caixa_fk[3]+3,
-                                     raio=5, fill=EDITOR, outline=BORDA, width=1)
-            tela.tag_lower(fundo_fk, texto_fk)
-
-    for nome in nomes:
-        x, y, altura = posicoes[nome]
-        _arredondado(tela, x, y, x + largura_no, y + altura, fill=PAINEL,
-                     outline=BORDA, width=1, raio=12, tags=("no", f"tabela:{nome}"))
-        tela.create_oval(x+14, y+14, x+22, y+22, fill=DESTAQUE, outline="")
-        tela.create_text(x+32, y+11, anchor="nw", text="TABELA", fill=SUAVE,
-                         font=("TkDefaultFont", 8, "bold"))
-        tela.create_text(x+14, y+34, anchor="nw", width=largura_no-28,
-                         text=textwrap.fill(nome, 27, break_long_words=True), fill=TEXTO,
-                         font=("TkDefaultFont", 10, "bold"))
-    max_nivel = max(niveis.values(), default=0)
-    tela.configure(scrollregion=(0, 0, 80 + max_nivel * passo_x + largura_no, max_y + 40))
+    for r in relacoes:
+        a, b = r.get("origem", "").rpartition("."), r.get("destino", "").rpartition(".")
+        if all((a[0], a[2], b[0], b[2])):
+            arestas.append(((a[0], a[2]), (b[0], b[2])))
+            tabelas.update(dict.fromkeys((a[0], b[0])))
+    candidatas = tabelas_mencionadas(entidade, tabelas, entidade=True)
+    principal = next(iter(candidatas)) if len(candidatas) == 1 else None
+    portas = {nome: [] for nome in tabelas}
+    for i, par in enumerate(arestas):
+        for ponta, (nome, chave) in enumerate(par):
+            portas[nome].append((i, ponta, chave))
+    titulos = {nome: nome+" · Principal" if nome == principal else nome for nome in portas}
+    largura = max([145] + [fonte.measure(v)+42 for nome, lista in portas.items()
+                           for v in [titulos[nome], *(chave for _, _, chave in lista)]])
+    margem, intervalo = 16, max(64, (len(arestas)+1)*12)
+    niveis = [margem, margem + altura//2]
+    pontos = {}
+    # Usa duas faixas de nós. Os rótulos ficam dentro dos nós, fora das arestas.
+    ordem = ([principal] if principal else []) + [nome for nome in portas if nome != principal]
+    for j, nome in enumerate(ordem):
+        lado = j % 2
+        x, y = margem + lado*(largura+intervalo), niveis[lado]
+        h = (1 + len(portas[nome])) * altura + 12
+        _arredondado(tela, x, y, x+largura, y+h, raio=10, fill=PAINEL,
+                     outline=DESTAQUE if nome == principal else BORDA, tags=("no",))
+        tela.create_text(x+12, y+6, text=titulos[nome], fill=SINTAXE if nome == principal else TEXTO,
+                         font=fonte, anchor="nw")
+        for k, (i, ponta, chave) in enumerate(portas[nome], start=1):
+            yp = y+6+k*altura+altura//2
+            tela.create_text(x+12, yp, text=chave, anchor="w", font=fonte, fill=SUAVE, tags="rotulo_fk")
+            xp = x if lado else x+largura
+            pontos[i, ponta] = (xp, yp)
+        niveis[lado] += h + altura - 12
+    for i in range(len(arestas)):
+        (x1, y1), (x2, y2) = pontos[i, 0], pontos[i, 1]
+        faixa = margem + largura + (i+1)*intervalo/(len(arestas)+1)
+        tela.create_line(x1, y1, faixa, y1, faixa, y2, x2, y2, arrow="last",
+                         width=1.6, fill=DESTAQUE, tags="aresta")
+        tela.create_oval(x1-2, y1-2, x1+2, y1+2, fill=DESTAQUE, outline="")
+    limites = tela.bbox("all")
+    if limites:
+        def centralizar(_=None):
+            x1, y1, x2, y2 = tela.bbox("all")
+            w, h = x2-x1+2*margem, y2-y1+2*margem
+            dx = max(0, (tela.winfo_width()-w)//2) + margem - x1
+            dy = max(0, (tela.winfo_height()-h)//2) + margem - y1
+            tela.move("all", dx, dy)
+            tela.configure(scrollregion=(0, 0, max(w, tela.winfo_width()), max(h, tela.winfo_height())))
+        centralizar()
+        tela.bind("<Configure>", centralizar)
 
 
 def interpretacao(pai, plano, pedido, leitura):
-    botoes = ttk.Frame(pai)
-    botoes.pack(fill="x", pady=(0, 10))
-    corpo = ttk.Frame(pai)
-    corpo.pack(fill="both", expand=True)
+    quadro = painel(pai)
+    quadro.pack(fill="both", expand=True)
+    corpo = quadro.conteudo
+    cab = tk.Frame(corpo, bg=PAINEL)
+    cab.pack(fill="x", pady=(0, 8))
+    rotulo(cab, "Interpretação da requisição", "Secao").pack(side="left")
+    def completa():
+        auxiliar = janela_auxiliar(pai, "Interpretação completa")
+        leitura(auxiliar, json.dumps(plano, ensure_ascii=False, indent=2, default=str))
+    Botao(cab, "Ver interpretação completa", completa, "terciario").pack(side="right")
+    conteudo = tk.Frame(corpo, bg=PAINEL)
+    conteudo.pack(fill="both", expand=True)
+    conteudo.columnconfigure(0, weight=2, uniform="interpretacao")
+    conteudo.columnconfigure(1, weight=3, uniform="interpretacao")
+    conteudo.rowconfigure(0, weight=1)
+    resumo = tk.Frame(conteudo, bg=PAINEL)
+    resumo.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+    grafico = tk.Frame(conteudo, bg=PAINEL)
+    grafico.grid(row=0, column=1, sticky="nsew")
+    campos = plano.get("campos_solicitados", [])
+    filtros = [f"{f.get('campo', '')} {f.get('operador', '')} {json.dumps(f.get('valor'), ensure_ascii=False, default=str)}"
+               for f in plano.get("filtros", [])]
+    agregacoes = [f"{a.get('funcao', '')}({a.get('campo', '')})"
+                  for a in plano.get("agregacoes", pedido.get("agregacoes", []))]
+    itens = [("Entidade solicitada", [pedido.get("entidade")]), ("Campos identificados", campos),
+             ("Filtros aplicados", filtros), ("Agregações", agregacoes),
+             ("Agrupamentos", plano.get("agrupamento", pedido.get("agrupamento", [])))]
+    texto = tk.Text(resumo, bg=PAINEL, fg=TEXTO, wrap="word", font="TkDefaultFont",
+                    padx=2, bd=0, width=1, height=1, highlightthickness=0)
+    scroll = barra(resumo, texto.yview)
+    scroll.pack(side="right", fill="y")
+    texto.configure(yscrollcommand=scroll.set)
+    texto.pack(fill="both", expand=True)
+    texto.tag_configure("legenda", foreground=SUAVE, spacing1=6, spacing3=2)
+    for nome, valores in itens:
+        if valores and any(v is not None for v in valores):
+            texto.insert("end", nome+"\n", "legenda")
+            texto.insert("end", "\n".join(str(v) for v in valores)+"\n")
+    texto.configure(state="disabled")
+    rotulo(grafico, "Relacionamentos identificados", "Legenda").pack(anchor="w", pady=(4, 7))
     relacoes = plano.get("relacionamentos_necessarios", [])
-
-    def mostrar(pagina):
-        for filho in corpo.winfo_children():
-            filho.destroy()
-        for botao in botoes.winfo_children():
-            botao.configure(state="disabled" if botao.cget("text") == pagina else "normal")
-        if pagina == "JSON completo":
-            leitura(corpo, json.dumps(plano, ensure_ascii=False, indent=2))
-            return
-        if pagina == "Relacionamentos":
-            tela = tk.Canvas(corpo, bg=EDITOR, highlightthickness=0,
-                             xscrollincrement=24, yscrollincrement=24)
-            vertical = ttk.Scrollbar(corpo, command=tela.yview)
-            horizontal = ttk.Scrollbar(corpo, orient="horizontal", command=tela.xview)
-            horizontal.pack(side="bottom", fill="x")
-            vertical.pack(side="right", fill="y")
-            tela.pack(fill="both", expand=True)
-            tela.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-            desenhar_grafo(tela, relacoes, plano.get("tabelas_identificadas", []))
-            return
-        filtros = [f"{f.get('campo', f.get('chave_pedida', ''))} {f.get('operador', '')} "
-                   f"{json.dumps(f.get('valor'), ensure_ascii=False, default=str)}"
-                   for f in plano.get("filtros", [])]
-        agrupamentos = plano.get("agrupamento", pedido.get("agrupamento", []))
-        agregacoes = [f"{a.get('funcao', '')}({a.get('campo', '')})"
-                      for a in plano.get("agregacoes", pedido.get("agregacoes", []))]
-        itens = [
-            ("Entidade solicitada", [pedido.get("entidade")]),
-            ("Tabelas identificadas", plano.get("tabelas_identificadas", [])),
-            ("Campos selecionados", plano.get("campos_solicitados", [])),
-            ("Filtros", filtros),
-            ("Relacionamentos", [f"{r.get('origem', '')} → {r.get('destino', '')}" for r in relacoes]),
-            ("Agrupamentos", agrupamentos),
-            ("Agregações", agregacoes),
-        ]
-        tela = tk.Canvas(corpo, bg=FUNDO, highlightthickness=0)
-        barra = ttk.Scrollbar(corpo, command=tela.yview)
-        tela.pack(side="left", fill="both", expand=True)
-        barra.pack(side="right", fill="y")
-        tela.configure(yscrollcommand=barra.set)
-        cards = tk.Frame(tela, bg=FUNDO)
-        janela_cards = tela.create_window((0, 0), window=cards, anchor="nw")
-        conteudos = []
-        for titulo, valores in itens:
-            conteudo = "\n".join(str(valor) for valor in valores) if valores else "Não disponível"
-            conteudos.append(_cartao(cards, titulo, conteudo, 0, 0))
-
-        def organizar(evento):
-            tela.itemconfigure(janela_cards, width=evento.width)
-            colunas = 2 if evento.width < 850 else 3
-            for coluna in range(3):
-                cards.columnconfigure(coluna, weight=1 if coluna < colunas else 0,
-                                      uniform="interpretacao" if coluna < colunas else "")
-            for indice, (cartao, detalhe) in enumerate(conteudos):
-                cartao.grid_configure(row=indice // colunas, column=indice % colunas,
-                                      padx=(0, 8) if indice % colunas < colunas - 1 else (0, 0),
-                                      pady=(0, 10), sticky="nsew")
-                detalhe.configure(wraplength=max(180, int(evento.width / colunas) - 64))
-            tela.configure(scrollregion=tela.bbox("all"))
-
-        cards.bind("<Configure>", lambda _e: tela.configure(scrollregion=tela.bbox("all")), add="+")
-        tela.bind("<Configure>", organizar, add="+")
-        tela.bind("<MouseWheel>", lambda evento: tela.yview_scroll(int(-evento.delta / 120), "units"), add="+")
-
-    for nome in ("Resumo", "Relacionamentos", "JSON completo"):
-        ttk.Button(botoes, text=nome, command=lambda n=nome: mostrar(n)).pack(side="left", padx=(0, 8))
-    mostrar("Resumo")
+    if not relacoes:
+        rotulo(grafico, "Esta consulta não precisou de relacionamentos.", wraplength=300).pack(anchor="w")
+        return
+    tela = tk.Canvas(grafico, bg=EDITOR, width=1, height=1, highlightthickness=0)
+    horizontal = barra(grafico, tela.xview, "horizontal")
+    vertical = barra(grafico, tela.yview)
+    horizontal.pack(side="bottom", fill="x")
+    vertical.pack(side="right", fill="y")
+    tela.pack(fill="both", expand=True)
+    tela.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+    desenhar_grafo(tela, relacoes, plano.get("tabelas_identificadas", []), pedido.get("entidade", ""))
 
 
 def metricas(pai, m, aviso):
@@ -221,7 +154,7 @@ def metricas(pai, m, aviso):
     ttk.Label(pai, text="Registro de métricas indisponível." if aviso_falha else "Métricas da execução",
               style="Aviso.TLabel" if aviso_falha else "Secao.TLabel").pack(anchor="w", pady=(0, 8))
     area = ttk.Frame(pai)
-    area.pack(fill="both", expand=True)
+    area.pack(fill="x")
     area.columnconfigure((0, 1), weight=1, uniform="metrica")
     grupos = [(0, "Requisição · acumulado", [
         ("Interpretação", m.get("tempo_interpretacao_segundos")),
@@ -233,6 +166,7 @@ def metricas(pai, m, aviso):
     for col, titulo, itens in grupos:
         bloco = painel(area)
         bloco.grid(row=0, column=col, sticky="new", padx=(0, 6) if col == 0 else (6, 0))
+        bloco = bloco.conteudo
         rotulo(bloco, titulo, "Secao").pack(anchor="w", pady=(0, 8))
         maior = max((v for _, v in itens if v is not None and v > 0), default=0)
         for nome, valor in itens:
@@ -263,3 +197,14 @@ def metricas(pai, m, aviso):
             saida = ollama.get("tokens_gerados")
             detalhe = f"Tokens de entrada / saída: {entrada if entrada is not None else 'Não disponível'} / {saida if saida is not None else 'Não disponível'}"
         rotulo(bloco, detalhe, "Legenda", wraplength=330).pack(anchor="w", pady=(6, 0))
+
+    detalhes = painel(pai)
+    detalhes.pack(fill="x", pady=(12, 0))
+    detalhes = detalhes.conteudo
+    for i, (titulo, valor) in enumerate([
+            ("Tempo total", segundos(m.get("tempo_total_segundos"))),
+            ("Tentativas de interpretação", m.get("tentativas_interpretacao")),
+            ("Tentativas SQL", m.get("tentativas_sql"))]):
+        detalhes.columnconfigure(i, weight=1, uniform="tentativas")
+        rotulo(detalhes, titulo).grid(row=0, column=i, sticky="w")
+        rotulo(detalhes, "—" if valor is None else str(valor), "Secao").grid(row=1, column=i, sticky="w")

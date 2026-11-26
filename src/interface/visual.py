@@ -1,241 +1,259 @@
-"""Identidade visual, cartões e componentes compartilhados das janelas."""
+"""Componentes e identidade compartilhados pelas janelas do agente."""
 import tkinter as tk
 from tkinter import font, ttk
 
-FUNDO, PAINEL, PAINEL_ELEVADO, EDITOR = "#221D21", "#433D3D", "#504949", "#30292C"
-BORDA, BORDA_FOCO = "#5A5352", "#D88A55"
-TEXTO, SUAVE = "#F5F1ED", "#B7AEA5"
-DESTAQUE, DESTAQUE_ATIVO = "#F77014", "#E33C08"
+import customtkinter as ctk
+from PIL import Image, ImageDraw, ImageTk
+
+FUNDO = EDITOR = "#221D21"
+PAINEL, COMPONENTE, PAINEL_ELEVADO = "#30292C", "#433D3D", "#504949"
+BORDA, TEXTO, SUAVE = "#51484C", "#F5F1ED", "#B7AEA5"
+DESTAQUE, DESTAQUE_ATIVO, SINTAXE = "#F77014", "#E33C08", "#F8A478"
 SUCESSO, ERRO, AVISO = "#55C995", "#FF8178", "#F2C879"
-SELECAO = "#624033"
-ESPACOS = {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32}
-RAIOS = {"botao": 10, "painel": 14, "campo": 8}
-ESPACO = ESPACOS["lg"]
 
 
-def _imagem_botao(raiz, cor, raio=10, cor_foco=None):
-    tamanho = raio * 2 + 4
-    imagem = tk.PhotoImage(master=raiz, width=tamanho, height=tamanho)
-    for y in range(tamanho):
-        borda = max(0, raio - y) if y < raio else max(0, y - (tamanho - raio - 1)) if y >= tamanho - raio else 0
-        inseto = raio - int(max(0, raio * raio - (raio - borda) ** 2) ** 0.5)
-        if tamanho > inseto * 2:
-            imagem.put(cor, to=(inseto, y, tamanho - inseto, y + 1))
-            if cor_foco and (y in (raio, tamanho - raio - 1)):
-                imagem.put(cor_foco, to=(inseto, y, tamanho - inseto, y + 1))
-            elif cor_foco:
-                imagem.put(cor_foco, to=(inseto, y))
-                imagem.put(cor_foco, to=(tamanho - inseto - 1, y))
-    return imagem
+def superficie(pai):
+    if isinstance(pai, ctk.CTkFrame):
+        return pai.cget("fg_color")
+    if isinstance(pai, ttk.Widget):
+        return ttk.Style(pai).lookup(pai.cget("style") or pai.winfo_class(), "background") or FUNDO
+    return pai.cget("background")
 
 
-def _botao_arredondado(s, raiz, nome, cor, ativo, pressionado, desabilitado, texto):
-    elemento = nome.replace(".", "_") + ".fundo"
-    normal = _imagem_botao(raiz, cor)
-    hover = _imagem_botao(raiz, ativo)
-    press = _imagem_botao(raiz, pressionado)
-    disabled = _imagem_botao(raiz, desabilitado)
-    focado = _imagem_botao(raiz, cor, cor_foco=BORDA_FOCO)
-    s.element_create(elemento, "image", normal, ("disabled", disabled),
-                     ("pressed", press), ("active", hover), ("focus", focado),
-                     border=10, sticky="nsew")
-    s.layout(nome, [(elemento, {"sticky": "nsew", "children": [
-        ("Button.label", {"sticky": "nsew"})]})])
-    s.configure(nome, padding=(14, 10), foreground=texto,
-                font=("TkDefaultFont", 10, "bold"), anchor="center")
-    s.map(nome, foreground=[("disabled", SUAVE)])
-    raiz._design_images.extend((normal, hover, press, disabled, focado))
+def desenho(nome, cor):
+    """Pictogramas em uma mesma grade. Só as ilustrações usam imagens."""
+    img = Image.new("RGBA", (96, 96))
+    d = ImageDraw.Draw(img)
+    def linha(*p):
+        d.line([int(n*4) for n in p], fill=cor, width=6, joint="curve")
+    def oval(x, y, a, b):
+        d.ellipse((4*x, 4*y, 4*a, 4*b), outline=cor, width=6)
+    if nome in ("marca", "banco"):
+        oval(3, 3, 17, 9)
+        linha(3, 6, 3, 16, 5, 18, 9, 19, 13, 19)
+        linha(17, 6, 17, 12)
+        linha(3, 11, 6, 13, 12, 14, 16, 12)
+        if nome == "marca":
+            linha(15, 18, 20, 15, 22, 12)
+            oval(13, 17, 16, 20)
+            oval(19, 13, 22, 16)
+        else:
+            linha(13, 19, 17, 17, 17, 12)
+    elif nome == "modelo":
+        d.rounded_rectangle((24, 24, 72, 72), radius=7, outline=cor, width=6)
+        for v in (9, 15):
+            linha(v, 3, v, 6); linha(v, 18, v, 21)
+            linha(3, v, 6, v); linha(18, v, 21, v)
+    elif nome == "seguro":
+        linha(4, 5, 12, 2, 20, 5, 19, 13, 16, 18, 12, 21, 8, 18, 5, 13, 4, 5)
+        linha(8, 11, 11, 14, 16, 9)
+    elif nome == "sucesso":
+        linha(4, 12, 10, 18, 21, 6)
+    elif nome == "tempo":
+        oval(3, 3, 21, 21); linha(12, 6, 12, 12, 16, 14)
+    elif nome == "rede":
+        for x, y in ((2, 9), (16, 2), (16, 16)):
+            d.rounded_rectangle((4*x, 4*y, 4*(x+5), 4*(y+5)), radius=3, outline=cor, width=5)
+        linha(7, 12, 11, 12, 11, 5, 16, 5); linha(11, 12, 11, 18, 16, 18)
+    elif nome == "tabela":
+        d.rectangle((12, 16, 84, 80), outline=cor, width=6)
+        linha(3, 10, 21, 10); linha(9, 10, 9, 20)
+    elif nome == "executar":
+        linha(6, 3, 20, 12, 6, 21, 6, 3)
+    elif nome == "importar":
+        linha(3, 17, 3, 6, 9, 6, 11, 9, 21, 9, 18, 18, 3, 18)
+    elif nome == "codigo":
+        linha(8, 6, 3, 12, 8, 18); linha(16, 6, 21, 12, 16, 18)
+    elif nome == "limpar":
+        linha(3, 14, 14, 3, 21, 10, 10, 21, 3, 14); linha(9, 20, 21, 20)
+    elif nome == "novo":
+        linha(4, 12, 20, 12); linha(12, 4, 12, 20)
+    return img
+
+
+def icone(pai, nome, cor=DESTAQUE, tamanho=20):
+    imagem = ImageTk.PhotoImage(desenho(nome, cor).resize((tamanho, tamanho), Image.Resampling.LANCZOS), master=pai)
+    item = tk.Label(pai, image=imagem, bg=superficie(pai), bd=0)
+    item.imagem = imagem
+    return item
 
 
 def estilo(raiz):
+    ctk.set_appearance_mode("dark")
     familias = set(font.families(root=raiz))
-    familia = "Segoe UI" if "Segoe UI" in familias else font.nametofont("TkDefaultFont", root=raiz).actual("family")
-    tecnica = "Consolas" if "Consolas" in familias else font.nametofont("TkFixedFont", root=raiz).actual("family")
-    font.nametofont("TkDefaultFont", root=raiz).configure(family=familia, size=10)
-    font.nametofont("TkFixedFont", root=raiz).configure(family=tecnica, size=10)
-    raiz._design_images = []
+    # Em instalações Tk sem Xft a fonte de formas pode não estar disponível.
+    if "CustomTkinter_shapes_font" not in familias and raiz.tk.call("tk", "windowingsystem") == "x11":
+        ctk.DrawEngine.preferred_drawing_method = "polygon_shapes"
+    familia = next((f for f in ("Segoe UI", "DejaVu Sans", "helvetica") if f in familias), "TkDefaultFont")
+    tecnica = next((f for f in ("Consolas", "DejaVu Sans Mono", "courier") if f in familias), "TkFixedFont")
+    for nome, fonte, tamanho in (("TkDefaultFont", familia, 11), ("TkFixedFont", tecnica, 11)):
+        font.nametofont(nome, root=raiz).configure(family=fonte, size=tamanho)
+    raiz.configure(bg=FUNDO)
+    raiz.icone = ImageTk.PhotoImage(desenho("marca", DESTAQUE), master=raiz)
+    raiz.iconphoto(True, raiz.icone)
     s = ttk.Style(raiz)
     s.theme_use("clam")
-    raiz.configure(bg=FUNDO)
-    s.configure(".", background=FUNDO, foreground=TEXTO, fieldbackground=EDITOR,
-                bordercolor=BORDA, lightcolor=BORDA, darkcolor=FUNDO, focuscolor=BORDA_FOCO,
-                font=(familia, 10))
+    s.configure(".", background=FUNDO, foreground=TEXTO, font=(familia, 11))
     s.configure("TFrame", background=FUNDO)
     for nome, tamanho, peso, cor in [
-        ("Titulo", 22, "bold", TEXTO), ("Secao", 13, "bold", TEXTO),
-        ("Valor", 17, "bold", TEXTO), ("Suave", 10, "normal", SUAVE),
-        ("Legenda", 9, "bold", SUAVE), ("Sucesso", 10, "bold", SUCESSO),
-        ("Erro", 11, "bold", ERRO), ("Aviso", 10, "normal", AVISO),
-        ("Tecnico", 10, "normal", SUAVE),
+        ("Titulo", 24, "bold", TEXTO), ("Secao", 15, "bold", TEXTO),
+        ("Valor", 22, "bold", TEXTO), ("Suave", 10, "normal", SUAVE),
+        ("Legenda", 10, "bold", SUAVE), ("Sucesso", 10, "bold", SUCESSO),
+        ("Erro", 12, "bold", ERRO), ("Aviso", 10, "normal", AVISO), ("Tecnico", 10, "normal", SUAVE)
     ]:
-        s.configure(nome + ".TLabel", font=(familia, tamanho, peso), foreground=cor)
-    s.configure("TButton", background=PAINEL_ELEVADO)
-    s.map("TButton", background=[("disabled", PAINEL), ("pressed", DESTAQUE_ATIVO), ("active", "#665D5A")])
-    s.configure("Executar.TButton", background=DESTAQUE, foreground=FUNDO, font=(familia, 10, "bold"))
-    s.map("Executar.TButton", background=[("disabled", "#6B5143"), ("pressed", DESTAQUE_ATIVO), ("active", "#FF883B")],
-          foreground=[("disabled", SUAVE)])
-    _botao_arredondado(s, raiz, "TButton", PAINEL_ELEVADO, "#665D5A", DESTAQUE_ATIVO, "#393334", TEXTO)
-    _botao_arredondado(s, raiz, "Executar.TButton", DESTAQUE, "#FF883B", DESTAQUE_ATIVO, "#6B5143", FUNDO)
-    _botao_arredondado(s, raiz, "Terciario.TButton", PAINEL, PAINEL_ELEVADO, BORDA, PAINEL, TEXTO)
-    s.configure("TNotebook", background=FUNDO, borderwidth=0, relief="flat",
-                bordercolor=FUNDO, lightcolor=FUNDO, darkcolor=FUNDO, tabmargins=(0, 0, 0, 0))
-    s.configure("TNotebook.Tab", padding=(16, 10), background=FUNDO, foreground=SUAVE,
-                borderwidth=0, relief="flat", bordercolor=FUNDO, lightcolor=FUNDO,
-                darkcolor=FUNDO, focuscolor=FUNDO)
-    s.map("TNotebook.Tab", foreground=[("selected", DESTAQUE), ("active", TEXTO)],
-          background=[("selected", PAINEL), ("active", EDITOR)])
+        s.configure(nome+".TLabel", font=(familia, tamanho, peso), foreground=cor)
     s.configure("Treeview", background=EDITOR, fieldbackground=EDITOR, foreground=TEXTO,
-                rowheight=max(32, font.nametofont("TkDefaultFont", root=raiz).metrics("linespace") + 14),
-                borderwidth=0, relief="flat")
-    s.configure("Treeview.Heading", background=PAINEL_ELEVADO, foreground=TEXTO,
-                padding=(12, 10), borderwidth=0)
-    s.map("Treeview.Heading", background=[("active", BORDA)])
-    s.map("Treeview", background=[("selected", SELECAO)], foreground=[("selected", TEXTO)])
-    s.configure("TEntry", fieldbackground=EDITOR, foreground=TEXTO, padding=(10, 8), borderwidth=1)
-    s.map("TEntry", bordercolor=[("focus", DESTAQUE), ("!focus", BORDA)],
-          fieldbackground=[("disabled", PAINEL), ("!disabled", EDITOR)])
-    s.configure("TScrollbar", background=PAINEL_ELEVADO, troughcolor=FUNDO,
-                bordercolor=FUNDO, arrowcolor=SUAVE, width=10)
-    s.map("TScrollbar", background=[("disabled", FUNDO), ("active", DESTAQUE)])
-    s.configure("Horizontal.TProgressbar", background=DESTAQUE, troughcolor=EDITOR, thickness=5)
-    s.configure("Vertical.TProgressbar", background=DESTAQUE, troughcolor=EDITOR, thickness=5)
+                rowheight=font.nametofont("TkDefaultFont", root=raiz).metrics("linespace")+16,
+                borderwidth=0, relief="flat", bordercolor=PAINEL, lightcolor=PAINEL, darkcolor=PAINEL)
+    s.configure("Treeview.Heading", background=COMPONENTE, foreground=TEXTO,
+                padding=(10, 8), borderwidth=0)
+    s.map("Treeview.Heading", background=[("active", PAINEL_ELEVADO)])
+    s.map("Treeview", background=[("selected", "#624033")], foreground=[("selected", TEXTO)])
 
 
-def painel(pai, **opcoes):
-    """Painel de superfície suave com raio consistente e padding reutilizável."""
-    cor_fundo = FUNDO
-    try:
-        cor_fundo = pai.cget("background") or FUNDO
-    except tk.TclError:
-        pass
-    caixa = tk.Frame(pai, bg=PAINEL, padx=ESPACOS["xl"], pady=ESPACOS["lg"],
-                     highlightthickness=0, **opcoes)
-    raio = RAIOS["painel"]
-    cantos = [
-        (0, 0, "nw", (0, 0, raio * 2, raio * 2)),
-        (1, 0, "ne", (-raio, 0, raio, raio * 2)),
-        (0, 1, "sw", (0, -raio, raio * 2, raio)),
-        (1, 1, "se", (-raio, -raio, raio, raio)),
-    ]
-    for x, y, ancora, oval in cantos:
-        mascara = tk.Canvas(caixa, width=raio, height=raio, bg=cor_fundo, highlightthickness=0)
-        mascara.create_oval(*oval, fill=PAINEL, outline="")
-        mascara.place(relx=x, rely=y, anchor=ancora, bordermode="outside")
+class Botao(ctk.CTkButton):
+    def __init__(self, pai, text, command, tipo="secundario", simbolo=None, **opcoes):
+        fundo = superficie(pai)
+        self.normal = {"primario": DESTAQUE, "terciario": fundo}.get(tipo, COMPONENTE)
+        self.sobre = "#FF934C" if tipo == "primario" else PAINEL_ELEVADO
+        cor = FUNDO if tipo == "primario" else TEXTO
+        imagem = ctk.CTkImage(dark_image=desenho(simbolo, cor), size=(17, 17)) if simbolo else None
+        fonte = font.nametofont("TkDefaultFont", root=pai).actual("family")
+        super().__init__(pai, text=text, command=command, fg_color=self.normal, bg_color=fundo,
+                         hover_color=self.sobre, text_color=cor, text_color_disabled=SUAVE,
+                         corner_radius=11, border_width=1, border_color=self.normal,
+                         height=44 if tipo == "primario" else 36, width=36,
+                         border_spacing=7, font=(fonte, 14, "bold" if tipo == "primario" else "normal"),
+                         image=imagem, **opcoes)
+        tk.Frame.configure(self, takefocus=1)
+        tk.Misc.bind(self, "<FocusIn>", lambda _: self.configure(border_color=SINTAXE))
+        tk.Misc.bind(self, "<FocusOut>", lambda _: self.configure(border_color=self.normal))
+        for tecla in ("<space>", "<Return>"):
+            tk.Misc.bind(self, tecla, self._tecla)
+        self.bind("<ButtonPress-1>", self._pressionar)
+        self.bind("<Leave>", self._soltar)
+
+    def _on_release(self, evento):
+        # O comando pode destruir esta janela. Finalize o estado antes de invocá-lo.
+        self._soltar(evento)
+        x = evento.x_root - self.winfo_rootx()
+        y = evento.y_root - self.winfo_rooty()
+        if 0 <= x < self.winfo_width() and 0 <= y < self.winfo_height():
+            self.invoke()
+
+    def _tecla(self, _):
+        self.invoke()
+        return "break"
+
+    def _pressionar(self, _):
+        if self.cget("state") != "disabled":
+            tk.Misc.focus_set(self)
+            self.configure(fg_color=DESTAQUE_ATIVO, hover_color=DESTAQUE_ATIVO)
+
+    def _soltar(self, _):
+        if self.winfo_exists() and self.cget("state") != "disabled":
+            self.configure(fg_color=self.normal, hover_color=self.sobre)
+
+    def configure(self, **kw):
+        if "state" in kw:
+            ativo = kw["state"] != "disabled"
+            kw.update(fg_color=self.normal if ativo else PAINEL, border_color=self.normal if ativo else BORDA,
+                      hover_color=self.sobre)
+            tk.Frame.configure(self, takefocus=int(ativo))
+        super().configure(**kw)
+
+
+def barra(pai, command, orient="vertical"):
+    return ctk.CTkScrollbar(pai, command=command, orientation=orient, fg_color=superficie(pai),
+                            bg_color=superficie(pai), button_color=BORDA, button_hover_color=SUAVE,
+                            **({"width": 13} if orient == "vertical" else {"height": 13}))
+
+
+def painel(pai):
+    caixa = ctk.CTkFrame(pai, fg_color=PAINEL, bg_color=superficie(pai), corner_radius=16)
+    caixa.conteudo = tk.Frame(caixa, bg=PAINEL)
+    caixa.conteudo.pack(fill="both", expand=True, padx=18, pady=12)
     return caixa
 
 
 def rotulo(pai, texto, tipo="Suave", **kwargs):
-    kwargs.setdefault("background", PAINEL)
+    kwargs.setdefault("background", superficie(pai))
     return ttk.Label(pai, text=texto, style=tipo+".TLabel", **kwargs)
 
 
-def truncar(texto, limite=24):
-    texto = str(texto)
-    return texto if len(texto) <= limite else texto[:max(1, limite - 1)].rstrip() + "…"
+def truncar(texto, limite=40):
+    return texto if len(texto) <= limite else texto[:limite-1].rstrip()+"…"
 
 
 def dica(widget, conteudo):
-    """Exibe o texto integral em hover e foco para preservar acessibilidade."""
-    atual = {"janela": None}
-
-    def mostrar(_=None):
-        if atual["janela"] or not conteudo:
-            return
-        janela = tk.Toplevel(widget)
-        janela.wm_overrideredirect(True)
-        janela.attributes("-topmost", True)
-        ttk.Label(janela, text=conteudo, background=PAINEL_ELEVADO, foreground=TEXTO,
-                  padding=(10, 7), wraplength=420).pack()
-        janela.wm_geometry(f"+{widget.winfo_rootx()+12}+{widget.winfo_rooty()+widget.winfo_height()+6}")
-        atual["janela"] = janela
-
-    def ocultar(_=None):
-        if atual["janela"]:
-            atual["janela"].destroy()
-            atual["janela"] = None
-
-    widget.bind("<Enter>", mostrar, add="+")
-    widget.bind("<FocusIn>", mostrar, add="+")
-    widget.bind("<Leave>", ocultar, add="+")
-    widget.bind("<FocusOut>", ocultar, add="+")
-
-
-def icone_ambiente(pai, tipo):
-    tela = tk.Canvas(pai, width=24, height=24, background=PAINEL, highlightthickness=0)
-    linha = lambda *xy: tela.create_line(*xy, fill=DESTAQUE, width=1.6, capstyle="round", joinstyle="round")
-    if tipo == "Banco de dados":
-        tela.create_oval(4, 4, 20, 10, outline=DESTAQUE)
-        linha(4, 7, 4, 17)
-        linha(20, 7, 20, 17)
-        tela.create_arc(4, 14, 20, 20, start=180, extent=180, style="arc", outline=DESTAQUE)
-    elif tipo == "Modelo local":
-        tela.create_rectangle(6, 6, 18, 18, outline=DESTAQUE)
-        tela.create_rectangle(9, 9, 15, 15, outline=DESTAQUE)
-        for x in (9, 15):
-            linha(x, 3, x, 6)
-            linha(x, 18, x, 21)
-            linha(3, x, 6, x)
-            linha(18, x, 21, x)
-    elif tipo == "Conexão MySQL":
-        linha(8, 3, 8, 8)
-        linha(16, 3, 16, 8)
-        linha(5, 8, 19, 8, 17, 15, 12, 17, 7, 15, 5, 8)
-        linha(12, 17, 12, 22)
-    elif tipo == "Processamento":
-        tela.create_rectangle(3, 4, 21, 16, outline=DESTAQUE)
-        linha(12, 16, 12, 20)
-        linha(7, 20, 17, 20)
-    else:
-        tela.create_arc(7, 3, 17, 16, start=0, extent=180, style="arc", outline=DESTAQUE)
-        tela.create_rectangle(5, 10, 19, 20, outline=DESTAQUE)
-        linha(12, 13, 12, 17)
-    return tela
+    janela = None
+    def mostrar(_):
+        nonlocal janela
+        if janela is None:
+            janela = tk.Toplevel(widget)
+            janela.overrideredirect(True)
+            rotulo(janela, conteudo, background=COMPONENTE, padding=8, wraplength=600).pack()
+            janela.geometry(f"+{widget.winfo_rootx()}+{widget.winfo_rooty()+widget.winfo_height()}")
+    def ocultar(_):
+        nonlocal janela
+        if janela:
+            janela.destroy()
+            janela = None
+    for evento in ("<Enter>", "<FocusIn>"):
+        widget.bind(evento, mostrar)
+    for evento in ("<Leave>", "<FocusOut>", "<Unmap>"):
+        widget.bind(evento, ocultar)
 
 
 def cabecalho(pai, titulo, subtitulo, sucesso=False):
-    barra = ttk.Frame(pai)
-    barra.pack(fill="x", pady=(0, ESPACO))
-    logo = tk.Canvas(barra, width=54, height=54, highlightthickness=0, bg=FUNDO)
-    logo.pack(side="left", padx=(0, 14))
-    logo.create_oval(2, 2, 52, 52, fill=PAINEL, outline=BORDA)
-    if sucesso:
-        logo.create_line(14, 27, 23, 36, 40, 17, fill=SUCESSO, width=3, capstyle="round", joinstyle="round")
-    else:
-        logo.create_oval(13, 10, 30, 19, outline=DESTAQUE, width=2)
-        logo.create_arc(13, 14, 30, 24, start=180, extent=180, style="arc", outline=DESTAQUE, width=2)
-        logo.create_arc(13, 19, 30, 29, start=180, extent=180, style="arc", outline=DESTAQUE, width=2)
-        logo.create_line(13, 14, 13, 24, fill=DESTAQUE, width=2)
-        logo.create_line(30, 14, 30, 24, fill=DESTAQUE, width=2)
-        logo.create_oval(33, 29, 40, 36, fill=DESTAQUE, outline="")
-        for x, y in ((29, 29), (34, 24), (36, 37)):
-            logo.create_line(x, y, 35, 32, fill=SUAVE, width=1.3)
-    ttk.Label(barra, text=titulo, style="Titulo.TLabel").pack(anchor="w")
-    if titulo == "Agente Inteligente Local":
-        subtitulo = "Inteligência aplicada a bancos de dados"
-    ttk.Label(barra, text=subtitulo, style="Suave.TLabel").pack(anchor="w")
+    topo = ttk.Frame(pai)
+    topo.pack(fill="x", pady=(0, 14))
+    selo = ctk.CTkFrame(topo, corner_radius=14, fg_color=PAINEL, bg_color=FUNDO)
+    selo.pack(side="left", padx=(0, 14))
+    icone(selo, "sucesso" if sucesso else "marca", SUCESSO if sucesso else DESTAQUE, 32).pack(padx=11, pady=11)
+    rotulo(topo, titulo, "Titulo").pack(anchor="w")
+    rotulo(topo, subtitulo).pack(anchor="w")
 
 
-def indicador(pai, titulo, valor):
+def indicador(pai, titulo, valor, simbolo, detalhe=""):
     caixa = painel(pai)
-    topo = tk.Frame(caixa, bg=PAINEL)
+    topo = tk.Frame(caixa.conteudo, bg=PAINEL)
     topo.pack(fill="x")
-    icone = tk.Canvas(topo, width=24, height=24, bg=PAINEL, highlightthickness=0)
-    icone.pack(side="left", padx=(0, 8))
-    if "Tempo" in titulo:
-        icone.create_oval(4, 4, 20, 20, outline=DESTAQUE, width=1.5)
-        icone.create_line(12, 7, 12, 12, 16, 14, fill=DESTAQUE, width=1.5, capstyle="round")
-    elif "SQL" in titulo:
-        icone.create_line(9, 5, 6, 5, 6, 19, 9, 19, fill=DESTAQUE, width=1.5)
-        icone.create_line(15, 5, 18, 5, 18, 19, 15, 19, fill=DESTAQUE, width=1.5)
-        icone.create_line(10, 16, 14, 8, fill=DESTAQUE, width=1.5)
-    elif "interpretação" in titulo.lower():
-        icone.create_line(6, 17, 12, 7, 18, 17, fill=DESTAQUE, width=1.3)
-        for x, y in ((6, 17), (12, 7), (18, 17)):
-            icone.create_oval(x-2, y-2, x+2, y+2, fill=DESTAQUE, outline="")
-    else:
-        icone.create_rectangle(5, 6, 19, 10, outline=DESTAQUE, width=1.3)
-        icone.create_rectangle(5, 12, 19, 18, outline=DESTAQUE, width=1.3)
-    rotulo(topo, titulo, "Legenda").pack(side="left", anchor="w")
-    texto = rotulo(caixa, valor, "Valor")
-    texto.pack(anchor="w", pady=(8, 0))
-    return caixa, texto
+    icone(topo, simbolo, tamanho=18).pack(side="left", padx=(0, 8))
+    rotulo(topo, titulo).pack(side="left")
+    rotulo(caixa.conteudo, valor, "Valor").pack(anchor="w")
+    if detalhe:
+        rotulo(caixa.conteudo, detalhe).pack(anchor="w")
+    return caixa
+
+
+class Abas(ttk.Frame):
+    """Navegação de largura fixa entre páginas que ocupam a mesma região."""
+    def __init__(self, pai, nomes):
+        super().__init__(pai)
+        self.paginas, self.botoes = {}, {}
+        self.atual = nomes[0]
+        nav = ttk.Frame(self)
+        nav.pack(fill="x", pady=(0, 8))
+        for nome, simbolo in zip(nomes, ("codigo", "tabela", "rede")):
+            botao = Botao(nav, nome, lambda n=nome: self.selecionar(n), simbolo=simbolo)
+            botao.pack(side="left", padx=(0, 6))
+            self.botoes[nome] = botao
+            self.paginas[nome] = ttk.Frame(self)
+        self.selecionar(self.atual)
+        def avancar(evento, passo):
+            self.selecionar(nomes[(nomes.index(self.atual)+passo) % len(nomes)])
+            tk.Misc.focus_set(self.botoes[self.atual])
+            return "break"
+        self.winfo_toplevel().bind("<Control-Tab>", lambda e: avancar(e, 1))
+        self.winfo_toplevel().bind("<Control-Shift-Tab>", lambda e: avancar(e, -1))
+
+    def selecionar(self, nome):
+        self.paginas[self.atual].pack_forget()
+        self.atual = nome
+        self.paginas[nome].pack(fill="both", expand=True)
+        for chave, botao in self.botoes.items():
+            ativo = chave == nome
+            botao.normal = PAINEL_ELEVADO if ativo else FUNDO
+            botao.configure(fg_color=botao.normal, border_color=botao.normal,
+                            text_color=SINTAXE if ativo else SUAVE)
